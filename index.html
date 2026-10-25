@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Vetrina — Magic: The Gathering</title>
+
+<!-- Icona integrata tramite Data URI (nessun file esterno richiesto) -->
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='115' fill='%23090b14'/%3E%3Ccircle cx='256' cy='256' r='185' fill='none' stroke='%23dfb564' stroke-width='6' opacity='0.4'/%3E%3Cpath d='M 256 96 L 290 190 L 396 142 L 316 238 L 416 256 L 316 274 L 396 370 L 290 322 L 256 416 L 222 322 L 116 370 L 196 274 L 96 256 L 196 238 L 116 142 L 222 190 Z' fill='none' stroke='%23dfb564' stroke-width='14' stroke-linejoin='round'/%3E%3Cpolygon points='0,-35 10,-10 35,0 10,10 0,35 -10,10 -35,0 -10,-10' fill='%23ffdf80' transform='translate(256,256)'/%3E%3C/svg%3E">
+
 <style>
   /* Layout: una sola carta centrata a tutto schermo; ricerca e artwork sono livelli sopra. */
   :root {
@@ -17,7 +21,6 @@
     --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     color-scheme: dark;
   }
-  /* Colori dell'alone di sfondo: registrati per poterli sfumare. */
   @property --glow1 { syntax: '<color>'; inherits: true; initial-value: rgba(223,181,100,.08); }
   @property --glow2 { syntax: '<color>'; inherits: true; initial-value: rgba(223,181,100,.08); }
   * { box-sizing: border-box; }
@@ -31,7 +34,6 @@
     -webkit-tap-highlight-color: transparent;
     transition: --glow1 .9s ease, --glow2 .9s ease;
   }
-  /* Sfondo atmosferico con bagliori dinamici e texture noise impercettibile */
   body::before {
     content: ""; position: fixed; inset: 0; pointer-events: none;
     background:
@@ -80,14 +82,12 @@
   #card {
     display: block; width: 100%; height: 100%; object-fit: contain;
     border-radius: var(--radius-card);
-    /* Ombra dinamica che risponde leggermente all'inclinazione 3D */
     filter: drop-shadow(calc(var(--ry) * -0.8px) calc(var(--rx) * 1.2px + 28px) 45px var(--shadow));
     transition: opacity .25s ease, filter .2s ease;
     user-select: none; -webkit-user-drag: none;
   }
   #wrap.loading #card { opacity: 0; }
 
-  /* Glare e Foil olografico rifinito */
   #glare {
     position: absolute; inset: 0; border-radius: var(--radius-card);
     pointer-events: none; overflow: hidden;
@@ -107,7 +107,6 @@
   }
   #wrap.loading #glare { opacity: 0; }
 
-  /* Battle: riquadro orizzontale, immagine ruotata di 90° e centrata. */
   #wrap.landscape {
     height: auto;
     width: min(92vw, calc(92vh * 680 / 488));
@@ -141,7 +140,6 @@
   #backBtn   { top: max(16px, env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); }
   #flipBtn   { top: calc(max(16px, env(safe-area-inset-top, 0px)) + 58px); left: max(16px, env(safe-area-inset-left, 0px)); }
 
-  /* Ricerca */
   #search {
     position: fixed; inset: 0; z-index: 30;
     background: rgba(8,9,12,.9); backdrop-filter: blur(18px);
@@ -175,7 +173,6 @@
   #grid button.battle img { transform: rotate(90deg) scale(.718); }
   #grid img { display: block; width: 100%; aspect-ratio: 488 / 680; object-fit: contain; background: transparent; border-radius: 6px; }
 
-  /* Artwork a tutto schermo */
   #art {
     position: fixed; inset: 0; z-index: 40; cursor: zoom-out;
     background: #000; overflow: hidden;
@@ -191,7 +188,6 @@
     object-fit: contain;
   }
 
-  /* Varianti con artisti diversi: colonna a sinistra della carta. */
   #variants {
     position: fixed; z-index: 5;
     left: max(16px, env(safe-area-inset-left, 0px));
@@ -229,7 +225,6 @@
   }
   #varList small { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .03em; }
 
-  /* Schermi stretti: le varianti diventano una striscia in basso e la carta si accorcia. */
   @media (max-width: 980px) {
     #variants {
       top: auto; width: auto; right: max(16px, env(safe-area-inset-right, 0px));
@@ -255,11 +250,6 @@
     -webkit-backdrop-filter: blur(12px);
   }
 
-  @media (max-width: 520px) {
-    #stage { padding: 4vh 4vw; }
-    #wrap { height: min(88vh, calc(92vw * 680 / 488)); }
-  }
-  /* Rifiniture: controlli discreti ma riconoscibili, ricerca più leggibile. */
   .corner {
     width: 48px; height: 48px;
     opacity: .68;
@@ -300,20 +290,6 @@
   #varList button[aria-current="true"] { box-shadow: inset 0 0 0 1px rgba(223,181,100,.08); }
   #msg { animation: msg-in .22s ease-out both; }
   @keyframes msg-in { from { opacity: 0; transform: translate(-50%, 7px); } to { opacity: 1; transform: translate(-50%, 0); } }
-  @media (max-width: 520px) {
-    .corner { width: 46px; height: 46px; opacity: .82; }
-    #search { padding-top: max(5vh, env(safe-area-inset-top, 0px)); gap: 12px; }
-    #quickSearch { gap: 6px; }
-    #quickSearch span { width: 100%; text-align: center; margin-bottom: 2px; }
-    #quickSearch button { min-height: 38px; }
-    #grid { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 12px; }
-    #varList button { width: 98px; }
-  }
-  @media (min-width: 981px) and (max-width: 1250px) {
-    #variants { width: 210px; }
-    #varList button { grid-template-columns: 70px 1fr; gap: 8px; }
-    #varList img { width: 70px; }
-  }
 
   @media (prefers-reduced-motion: reduce) {
     #card, #cardBtn, #glare, body { transition: none; }
@@ -388,7 +364,6 @@
   let variantsToken = 0;
   let varState = null;
 
-  /* ---------- Client API: una richiesta ogni 100 ms, cache in memoria ---------- */
   let nextSlot = 0;
   const cache = new Map();
   async function sf(path) {
@@ -403,12 +378,10 @@
     return data;
   }
 
-  /* Le carte double-faced non hanno image_uris al livello principale. */
   function faces(card) {
     if (card.image_uris) return [card.image_uris];
     return (card.card_faces || []).filter((f) => f.image_uris).map((f) => f.image_uris);
   }
-  /* Le Battle sono salvate di lato: la faccia frontale va ruotata di 90°. */
   function isBattleFace(card, i) {
     const f = card.card_faces && card.card_faces[i];
     const t = (f && f.type_line) || card.type_line || '';
@@ -424,7 +397,6 @@
     msgId = setTimeout(() => el.remove(), ms);
   }
 
-  /* ---------- Vista carta ---------- */
   const FX = {
     next:  { out: [{ translate: '0 0', opacity: 1 }, { translate: '-7% 0', opacity: 0 }], inn: [{ translate: '7% 0', opacity: 0 }, { translate: '0 0', opacity: 1 }] },
     prev:  { out: [{ translate: '0 0', opacity: 1 }, { translate: '7% 0', opacity: 0 }],  inn: [{ translate: '-7% 0', opacity: 0 }, { translate: '0 0', opacity: 1 }] },
@@ -449,7 +421,6 @@
     });
   }
 
-  /* Colori della carta per l'alone di sfondo. */
   const HUES = {
     W: 'rgba(240,225,175,.12)', U: 'rgba(65,130,240,.16)', B: 'rgba(140,95,210,.15)',
     R: 'rgba(235,70,50,.16)', G: 'rgba(50,185,105,.14)',
@@ -522,14 +493,6 @@
     loadVariants(card, face);
     if (artOpen) updateArt();
     await setFace(mode);
-    if (list.length > 1) {
-      const n = list[(index + 1) % list.length], p = list[(index - 1 + list.length) % list.length];
-      [n, p].forEach((c) => {
-        const u = faces(c)[0]; if (!u) return;
-        if (u.png) new Image().src = u.png;
-        if (artOpen && u.art_crop) new Image().src = u.art_crop;
-      });
-    }
   }
 
   function nav(d) {
@@ -562,7 +525,6 @@
     } catch (e) { loadRandom(); }
   }
 
-  /* ---------- Ricerca ---------- */
   function openSearch() {
     search.hidden = false;
     qEl.focus(); qEl.select();
@@ -646,7 +608,6 @@
   flipBtn.addEventListener('click', flip);
   backBtn.addEventListener('click', openSearch);
 
-  /* ---------- Artwork a schermo intero ---------- */
   const inset = (r, round) => {
     const vw = innerWidth, vh = innerHeight;
     return `inset(${Math.max(0, r.top)}px ${Math.max(0, vw - r.right)}px ${Math.max(0, vh - r.bottom)}px ${Math.max(0, r.left)}px round ${round}px)`;
@@ -784,7 +745,6 @@
   art.addEventListener('click', closeArt);
   document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && artOpen) closeArt(); });
 
-  /* ---------- Tastiera, tilt, swipe ---------- */
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (artOpen) { e.preventDefault(); closeArt(); }
@@ -844,7 +804,6 @@
     touchX = null;
   }, { passive: true });
 
-  /* ---------- Avvio ---------- */
   const hashId = location.hash.slice(1);
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hashId)) loadById(hashId);
   else loadRandom();
