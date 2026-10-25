@@ -775,14 +775,13 @@
   if (!reduceMotion) {
     const stage = $('#stage');
 
-    // Gestione Mouse (PC) e Touch (Trascinamento dito su Smartphone)
     const handleMove = (clientX, clientY) => {
       const r = wrap.getBoundingClientRect();
       const x = (clientX - (r.left + r.width / 2)) / (r.width / 2);
       const y = (clientY - (r.top + r.height / 2)) / (r.height / 2);
       const cl = (v) => Math.max(-1, Math.min(1, v));
-      wrap.style.setProperty('--ry', (cl(x) * 10).toFixed(2) + 'deg');
-      wrap.style.setProperty('--rx', (cl(y) * -10).toFixed(2) + 'deg');
+      wrap.style.setProperty('--ry', (cl(x) * 12).toFixed(2) + 'deg');
+      wrap.style.setProperty('--rx', (cl(y) * -12).toFixed(2) + 'deg');
       wrap.style.setProperty('--gx', (50 - cl(x) * 48).toFixed(1) + '%');
       wrap.style.setProperty('--gy', (50 - cl(y) * 48).toFixed(1) + '%');
       wrap.style.setProperty('--go', '1');
@@ -795,33 +794,61 @@
     };
 
     if (fine) {
+      // Gestione Mouse per PC
       stage.addEventListener('pointermove', (e) => handleMove(e.clientX, e.clientY));
       stage.addEventListener('pointerleave', resetMove);
     } else {
-      // Supporto interattivo al tocco su schermo mobile
-      stage.addEventListener('touchmove', (e) => {
+      // Gestione Touch per Smartphone (trascinamento dito sulla carta)
+      let isTouching = false;
+      stage.addEventListener('touchstart', (e) => {
         if (e.touches.length === 1) {
+          isTouching = true;
+          handleMove(e.touches[0].clientX, e.touches[0].clientY);
+          requestIOSOrientation(); // Richiede i permessi su iOS al primo tocco
+        }
+      }, { passive: true });
+
+      stage.addEventListener('touchmove', (e) => {
+        if (isTouching && e.touches.length === 1) {
           handleMove(e.touches[0].clientX, e.touches[0].clientY);
         }
       }, { passive: true });
-      stage.addEventListener('touchend', resetMove);
+
+      stage.addEventListener('touchend', () => {
+        isTouching = false;
+        resetMove();
+      });
     }
 
-    // Supporto al Giroscopio (Inclina l'iPhone per muovere la carta e il riflesso foil)
-    if (window.DeviceOrientationEvent) {
-      window.addEventListener('deviceorientation', (e) => {
-        if (e.gamma === null && e.beta === null) return;
-        // gamma: inclinazione sinistra/destra (-90 a 90)
-        // beta: inclinazione avanti/indietro (-180 a 180)
-        const x = Math.max(-1, Math.min(1, e.gamma / 30));
-        const y = Math.max(-1, Math.min(1, (e.beta - 45) / 30)); // 45 gradi come posizione naturale di lettura
-        
-        wrap.style.setProperty('--ry', (x * 12).toFixed(2) + 'deg');
-        wrap.style.setProperty('--rx', (y * -12).toFixed(2) + 'deg');
-        wrap.style.setProperty('--gx', (50 + x * 48).toFixed(1) + '%');
-        wrap.style.setProperty('--gy', (50 + y * 48).toFixed(1) + '%');
-        wrap.style.setProperty('--go', '1');
-      }, { passive: true });
+    // Gestione Giroscopio con richiesta permessi obbligatoria per iOS
+    function handleOrientation(e) {
+      if (e.gamma === null && e.beta === null) return;
+      const x = Math.max(-1, Math.min(1, e.gamma / 30));
+      const y = Math.max(-1, Math.min(1, (e.beta - 45) / 30));
+      
+      wrap.style.setProperty('--ry', (x * 14).toFixed(2) + 'deg');
+      wrap.style.setProperty('--rx', (y * -14).toFixed(2) + 'deg');
+      wrap.style.setProperty('--gx', (50 + x * 48).toFixed(1) + '%');
+      wrap.style.setProperty('--gy', (50 + y * 48).toFixed(1) + '%');
+      wrap.style.setProperty('--go', '1');
+    }
+
+    let requestedPermission = false;
+    function requestIOSOrientation() {
+      if (requestedPermission) return;
+      requestedPermission = true;
+
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission()
+          .then(response => {
+            if (response === 'granted') {
+              window.addEventListener('deviceorientation', handleOrientation, { passive: true });
+            }
+          })
+          .catch(() => {});
+      } else {
+        window.addEventListener('deviceorientation', handleOrientation, { passive: true });
+      }
     }
   }
 
