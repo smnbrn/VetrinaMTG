@@ -772,24 +772,57 @@
     else if (e.key === 'Backspace' && results.length) { e.preventDefault(); openSearch(); }
   });
 
-  if (fine && !reduceMotion) {
+  if (!reduceMotion) {
     const stage = $('#stage');
-    stage.addEventListener('pointermove', (e) => {
+
+    // Gestione Mouse (PC) e Touch (Trascinamento dito su Smartphone)
+    const handleMove = (clientX, clientY) => {
       const r = wrap.getBoundingClientRect();
-      const x = (e.clientX - (r.left + r.width / 2)) / (r.width / 2);
-      const y = (e.clientY - (r.top + r.height / 2)) / (r.height / 2);
+      const x = (clientX - (r.left + r.width / 2)) / (r.width / 2);
+      const y = (clientY - (r.top + r.height / 2)) / (r.height / 2);
       const cl = (v) => Math.max(-1, Math.min(1, v));
-      wrap.style.setProperty('--ry', (cl(x) * 7).toFixed(2) + 'deg');
-      wrap.style.setProperty('--rx', (cl(y) * -7).toFixed(2) + 'deg');
+      wrap.style.setProperty('--ry', (cl(x) * 10).toFixed(2) + 'deg');
+      wrap.style.setProperty('--rx', (cl(y) * -10).toFixed(2) + 'deg');
       wrap.style.setProperty('--gx', (50 - cl(x) * 48).toFixed(1) + '%');
       wrap.style.setProperty('--gy', (50 - cl(y) * 48).toFixed(1) + '%');
-      const near = Math.max(Math.abs(x), Math.abs(y)) < 1.6;
-      wrap.style.setProperty('--go', near ? '1' : '0');
-    });
-    stage.addEventListener('pointerleave', () => {
-      wrap.style.setProperty('--ry', '0deg'); wrap.style.setProperty('--rx', '0deg');
+      wrap.style.setProperty('--go', '1');
+    };
+
+    const resetMove = () => {
+      wrap.style.setProperty('--ry', '0deg');
+      wrap.style.setProperty('--rx', '0deg');
       wrap.style.setProperty('--go', '0');
-    });
+    };
+
+    if (fine) {
+      stage.addEventListener('pointermove', (e) => handleMove(e.clientX, e.clientY));
+      stage.addEventListener('pointerleave', resetMove);
+    } else {
+      // Supporto interattivo al tocco su schermo mobile
+      stage.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 1) {
+          handleMove(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }, { passive: true });
+      stage.addEventListener('touchend', resetMove);
+    }
+
+    // Supporto al Giroscopio (Inclina l'iPhone per muovere la carta e il riflesso foil)
+    if (window.DeviceOrientationEvent) {
+      window.addEventListener('deviceorientation', (e) => {
+        if (e.gamma === null && e.beta === null) return;
+        // gamma: inclinazione sinistra/destra (-90 a 90)
+        // beta: inclinazione avanti/indietro (-180 a 180)
+        const x = Math.max(-1, Math.min(1, e.gamma / 30));
+        const y = Math.max(-1, Math.min(1, (e.beta - 45) / 30)); // 45 gradi come posizione naturale di lettura
+        
+        wrap.style.setProperty('--ry', (x * 12).toFixed(2) + 'deg');
+        wrap.style.setProperty('--rx', (y * -12).toFixed(2) + 'deg');
+        wrap.style.setProperty('--gx', (50 + x * 48).toFixed(1) + '%');
+        wrap.style.setProperty('--gy', (50 + y * 48).toFixed(1) + '%');
+        wrap.style.setProperty('--go', '1');
+      }, { passive: true });
+    }
   }
 
   let touchX = null;
