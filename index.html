@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Vetrina">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#08090c">
-<meta name="app-version" content="5">
+<meta name="app-version" content="6">
 
 <style>
   /* Layout: una sola carta centrata a tutto schermo; ricerca e artwork sono livelli sopra. */
@@ -121,7 +121,7 @@
   @media (hover: none) {
     #wrap { --tilt: 14deg; }
     #card { filter: drop-shadow(0 26px 40px var(--shadow)); transition: opacity .25s ease; }
-    #cardBtn { transition: transform .12s linear; }
+    #cardBtn { transition: transform .07s linear; }
   }
 
   #wrap.landscape {
@@ -479,7 +479,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '5';
+  const VERSION = '6';
   const API = 'https://api.scryfall.com';
   const $ = (s) => document.querySelector(s);
   const wrap = $('#wrap'), btn = $('#cardBtn'), img = $('#card');
@@ -1227,10 +1227,12 @@
   }
 
   /* Dito sulla carta:
-     - tocco breve: apre l'artwork
-     - scorrimento orizzontale: carta successiva/precedente
-     - scorrimento verticale: variante successiva/precedente
-     - tenere premuto e muovere: inclina la carta e sposta il riflesso */
+     - appena la tocchi, la carta si inclina seguendo il dito (nessuna attesa)
+     - tocco breve senza muoversi: apre l'artwork
+     - passata veloce orizzontale: carta successiva/precedente
+     - passata veloce verticale: variante successiva/precedente
+     Fuori dalla carta valgono solo le passate. */
+  const FLICK_MS = 280, FLICK_PX = 50, TAP_PX = 10, TAP_MS = 300;
   let touch = null;
   function endFingerTilt() {
     fingerTilt = false;
@@ -1238,8 +1240,7 @@
   }
   function cancelTouch() {
     if (!touch) return;
-    clearTimeout(touch.timer);
-    if (touch.mode === 'tilt') endFingerTilt();
+    if (touch.onCard) endFingerTilt();
     touch = null;
   }
   document.addEventListener('touchstart', (e) => {
@@ -1247,33 +1248,29 @@
     if (e.touches.length !== 1 || !search.hidden || !setsEl.hidden) return;
     if (e.target instanceof Node && varPanel.contains(e.target)) return;
     const p = e.touches[0];
-    const t = { x0: p.clientX, y0: p.clientY, x: p.clientX, y: p.clientY, mode: 'pending', timer: 0 };
-    touch = t;
-    if (!artOpen && e.target instanceof Node && wrap.contains(e.target)) {
-      t.timer = setTimeout(() => {
-        if (touch !== t || t.mode !== 'pending') return;
-        t.mode = 'tilt'; fingerTilt = true;
-        tiltFromPoint(t.x, t.y);
-        if (navigator.vibrate) navigator.vibrate(8);
-      }, 220);
-    }
+    const onCard = !artOpen && e.target instanceof Node && wrap.contains(e.target);
+    touch = { x0: p.clientX, y0: p.clientY, x: p.clientX, y: p.clientY, t0: performance.now(), onCard };
+    if (onCard) { fingerTilt = true; tiltFromPoint(p.clientX, p.clientY); }
   }, { passive: true });
   document.addEventListener('touchmove', (e) => {
     if (!touch || e.touches.length !== 1) return;
     touch.x = e.touches[0].clientX; touch.y = e.touches[0].clientY;
-    if (touch.mode === 'tilt') tiltFromPoint(touch.x, touch.y);
-    else if (touch.mode === 'pending' && Math.hypot(touch.x - touch.x0, touch.y - touch.y0) > 12) {
-      touch.mode = 'swipe'; clearTimeout(touch.timer);
-    }
+    if (touch.onCard) tiltFromPoint(touch.x, touch.y);
   }, { passive: true });
   document.addEventListener('touchend', () => {
     if (!touch) return;
-    const t = touch; touch = null; clearTimeout(t.timer);
-    if (t.mode === 'tilt') { endFingerTilt(); swallowClick = Date.now(); return; }
-    if (t.mode !== 'swipe' || !search.hidden || !setsEl.hidden) return;
-    const dx = t.x - t.x0, dy = t.y - t.y0;
-    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.2) nav(dx < 0 ? 1 : -1);
-    else if (Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx) * 1.2) stepVariant(dy < 0 ? 1 : -1);
+    const t = touch; touch = null;
+    const dx = t.x - t.x0, dy = t.y - t.y0, dist = Math.hypot(dx, dy);
+    const dur = performance.now() - t.t0;
+    if (t.onCard) {
+      endFingerTilt();
+      /* Il tap breve lascia passare il click (apre l'artwork); tutto il resto no. */
+      if (dist > TAP_PX || dur > TAP_MS) swallowClick = Date.now();
+      if (dur > FLICK_MS) return;
+    }
+    if (!search.hidden || !setsEl.hidden) return;
+    if (Math.abs(dx) > FLICK_PX && Math.abs(dx) > Math.abs(dy) * 1.2) nav(dx < 0 ? 1 : -1);
+    else if (Math.abs(dy) > FLICK_PX && Math.abs(dy) > Math.abs(dx) * 1.2) stepVariant(dy < 0 ? 1 : -1);
   }, { passive: true });
   document.addEventListener('touchcancel', cancelTouch, { passive: true });
 
