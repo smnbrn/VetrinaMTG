@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Vetrina">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#08090c">
-<meta name="app-version" content="3">
+<meta name="app-version" content="5">
 
 <style>
   /* Layout: una sola carta centrata a tutto schermo; ricerca e artwork sono livelli sopra. */
@@ -158,7 +158,6 @@
   #randomBtn.rolling svg { animation: dice-roll .6s cubic-bezier(.3,1.4,.5,1); }
   #randomBtn[aria-busy="true"] { pointer-events: none; }
   @keyframes dice-roll { from { transform: rotate(0); } to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { #randomBtn.rolling svg { animation: none; } }
   #backBtn   { top: max(16px, env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); }
   #flipBtn   { top: calc(max(16px, env(safe-area-inset-top, 0px)) + 58px); left: max(16px, env(safe-area-inset-left, 0px)); }
   #motionBtn { top: calc(max(16px, env(safe-area-inset-top, 0px)) + 58px); right: max(16px, env(safe-area-inset-right, 0px)); }
@@ -402,11 +401,6 @@
   }
   #setsBack { align-self: center; margin-bottom: 2px; }
 
-  @media (prefers-reduced-motion: reduce) {
-    #card, #cardBtn, #glare, body { transition: none; }
-    #wrap.loading::after { animation: none; }
-    #grid button, #varList button, #variants, .corner { transition: none; }
-  }
 </style>
 </head>
 <body>
@@ -485,7 +479,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '3';
+  const VERSION = '5';
   const API = 'https://api.scryfall.com';
   const $ = (s) => document.querySelector(s);
   const wrap = $('#wrap'), btn = $('#cardBtn'), img = $('#card');
@@ -493,7 +487,10 @@
   const search = $('#search'), form = $('#searchForm'), qEl = $('#q'), hintEl = $('#hint'), grid = $('#grid');
   const art = $('#art'), artImg = $('#artImg'), artBg = $('#artBg');
   const varPanel = $('#variants'), varTitle = $('#varTitle'), varList = $('#varList');
-  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /* Scelta voluta: transizioni ed effetti restano attivi anche con "Riduci movimento" di iOS.
+     L'unica cosa che lo rispetta è l'ondeggiamento automatico della carta quando è ferma. */
+  const systemReduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduceMotion = false;
   const fine = matchMedia('(hover: hover) and (pointer: fine)').matches;
 
   let current = null, face = 0;
@@ -1114,8 +1111,9 @@
   let tiltRaf = 0, tiltNext = null;
 
   /* Scrive i valori una volta per fotogramma: il giroscopio manda decine di letture al secondo. */
+  /* Inclinazione e riflesso seguono i movimenti dell'utente (telefono, dito, mouse): restano
+     attivi anche con "Riduci movimento", che vale solo per le animazioni automatiche. */
   function setTilt(x, y, go) {
-    if (reduceMotion) return;
     tiltNext = { x: cl(x), y: cl(y), go };
     if (tiltRaf) return;
     tiltRaf = requestAnimationFrame(() => {
@@ -1168,7 +1166,7 @@
   const needsPermission = !!window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function';
   const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
 
-  if (!fine && !reduceMotion && window.DeviceOrientationEvent) {
+  if (!fine && window.DeviceOrientationEvent) {
     if (!needsPermission) {
       /* Android: nessun permesso da chiedere. */
       startGyro();
@@ -1213,7 +1211,7 @@
 
   /* Movimento di riserva: finché il giroscopio non manda dati (permesso non ancora dato,
      negato o sensore assente), la carta ondeggia piano e il riflesso resta visibile. */
-  if (!fine && !reduceMotion) {
+  if (!fine && !systemReduceMotion) {
     let driftT0 = 0;
     const drift = (ts) => {
       requestAnimationFrame(drift);
@@ -1251,7 +1249,7 @@
     const p = e.touches[0];
     const t = { x0: p.clientX, y0: p.clientY, x: p.clientX, y: p.clientY, mode: 'pending', timer: 0 };
     touch = t;
-    if (!artOpen && !reduceMotion && e.target instanceof Node && wrap.contains(e.target)) {
+    if (!artOpen && e.target instanceof Node && wrap.contains(e.target)) {
       t.timer = setTimeout(() => {
         if (touch !== t || t.mode !== 'pending') return;
         t.mode = 'tilt'; fingerTilt = true;
@@ -1313,7 +1311,7 @@
       el.textContent = [
         'versione: ' + VERSION + (location.search ? '  ' + location.search : ''),
         'app da Home: ' + yn(navigator.standalone === true || matchMedia('(display-mode: standalone)').matches),
-        'riduci movimento: ' + yn(reduceMotion),
+        'riduci movimento (iPhone): ' + yn(systemReduceMotion),
         'puntatore fine (mouse): ' + yn(fine),
         'serve permesso: ' + yn(needsPermission),
         'permesso: ' + permState,
