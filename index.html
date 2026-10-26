@@ -25,7 +25,7 @@
   @property --glow2 { syntax: '<color>'; inherits: true; initial-value: rgba(223,181,100,.08); }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  html, body { height: 100%; margin: 0; }
+  html, body { height: 100%; margin: 0; overscroll-behavior: none; }
   body {
     background: var(--bg);
     color: var(--ink);
@@ -51,15 +51,16 @@
     position: fixed; inset: 0; z-index: 2;
     display: grid; place-items: center;
     padding: max(2vh, env(safe-area-inset-top, 0px)) max(2vw, env(safe-area-inset-right, 0px)) max(2vh, env(safe-area-inset-bottom, 0px)) max(2vw, env(safe-area-inset-left, 0px));
-    perspective: 1200px;
+    /* Sul telefono i gesti sulla carta li gestisce la pagina (niente zoom o "tira per aggiornare"). */
+    touch-action: none;
   }
   #wrap {
-    --rx: 0deg; --ry: 0deg;
+    /* --nx / --ny: posizione del puntatore (o inclinazione del telefono) da -1 a 1. */
+    --nx: 0; --ny: 0; --tilt: 12deg;
     height: min(92vh, calc(92vw * 680 / 488));
     aspect-ratio: 488 / 680;
     position: relative;
     perspective: 1100px;
-    transform-style: preserve-3d;
   }
   #wrap.loading::after {
     content: ""; position: absolute; inset: 0;
@@ -73,18 +74,19 @@
   #cardBtn {
     all: unset; display: block; width: 100%; height: 100%; cursor: zoom-in;
     position: relative; border-radius: var(--radius-card);
-    transform: rotateX(var(--rx)) rotateY(var(--ry));
-    transform-style: preserve-3d;
+    transform: rotateX(calc(var(--ny) * var(--tilt) * -1)) rotateY(calc(var(--nx) * var(--tilt)));
     transition: transform .18s cubic-bezier(.25, .46, .45, .94);
+    will-change: transform;
   }
   #cardBtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
-  
+
   #card {
     display: block; width: 100%; height: 100%; object-fit: contain;
     border-radius: var(--radius-card);
-    filter: drop-shadow(calc(var(--ry) * -0.8px) calc(var(--rx) * 1.2px + 28px) 45px var(--shadow));
+    filter: drop-shadow(calc(var(--nx) * -10px) calc(var(--ny) * 12px + 28px) 45px var(--shadow));
     transition: opacity .25s ease, filter .2s ease;
-    user-select: none; -webkit-user-drag: none;
+    user-select: none; -webkit-user-select: none; -webkit-user-drag: none;
+    -webkit-touch-callout: none;
   }
   #wrap.loading #card { opacity: 0; }
 
@@ -106,6 +108,13 @@
     mix-blend-mode: color-dodge; opacity: .3;
   }
   #wrap.loading #glare { opacity: 0; }
+
+  /* Telefono: l'ombra resta fissa (ricalcolarla a ogni movimento rallenta) e l'inclinazione è un po' più ampia. */
+  @media (hover: none) {
+    #wrap { --tilt: 14deg; }
+    #card { filter: drop-shadow(0 26px 40px var(--shadow)); transition: opacity .25s ease; }
+    #cardBtn { transition: transform .12s linear; }
+  }
 
   #wrap.landscape {
     height: auto;
@@ -129,11 +138,11 @@
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
   }
-  .corner:hover, .corner:focus-visible { 
-    opacity: 1; background: rgba(24,28,38,.9); 
+  .corner:hover, .corner:focus-visible {
+    opacity: 1; background: rgba(24,28,38,.9);
     border-color: rgba(223,181,100,.3);
     transform: scale(1.08);
-    outline: none; 
+    outline: none;
   }
   .corner svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   #searchBtn { top: max(16px, env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); }
@@ -176,6 +185,7 @@
   #art {
     position: fixed; inset: 0; z-index: 40; cursor: zoom-out;
     background: #000; overflow: hidden;
+    touch-action: none;
   }
   #artBg {
     position: absolute; inset: -8%;
@@ -740,8 +750,11 @@
     a.onfinish = () => { finish(); a.cancel(); };
   }
 
-  btn.addEventListener('click', openArt);
-  wrap.addEventListener('click', (e) => { if (e.target === wrap) openArt(); });
+  /* Dopo aver inclinato la carta tenendo premuto, il rilascio non deve aprire l'artwork. */
+  let swallowClick = 0;
+  const tapOpen = () => { if (Date.now() - swallowClick > 450) openArt(); };
+  btn.addEventListener('click', tapOpen);
+  wrap.addEventListener('click', (e) => { if (e.target === wrap) tapOpen(); });
   art.addEventListener('click', closeArt);
   document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && artOpen) closeArt(); });
 
@@ -772,97 +785,119 @@
     else if (e.key === 'Backspace' && results.length) { e.preventDefault(); openSearch(); }
   });
 
-  if (!reduceMotion) {
-    const stage = $('#stage');
+  /* ---------- Inclinazione e riflesso: mouse, dito e giroscopio ---------- */
+  const cl = (v) => Math.max(-1, Math.min(1, v));
+  let tiltRaf = 0, tiltNext = null;
 
-    const handleMove = (clientX, clientY) => {
-      const r = wrap.getBoundingClientRect();
-      const x = (clientX - (r.left + r.width / 2)) / (r.width / 2);
-      const y = (clientY - (r.top + r.height / 2)) / (r.height / 2);
-      const cl = (v) => Math.max(-1, Math.min(1, v));
-      wrap.style.setProperty('--ry', (cl(x) * 12).toFixed(2) + 'deg');
-      wrap.style.setProperty('--rx', (cl(y) * -12).toFixed(2) + 'deg');
-      wrap.style.setProperty('--gx', (50 - cl(x) * 48).toFixed(1) + '%');
-      wrap.style.setProperty('--gy', (50 - cl(y) * 48).toFixed(1) + '%');
-      wrap.style.setProperty('--go', '1');
-    };
-
-    const resetMove = () => {
-      wrap.style.setProperty('--ry', '0deg');
-      wrap.style.setProperty('--rx', '0deg');
-      wrap.style.setProperty('--go', '0');
-    };
-
-    if (fine) {
-      // Gestione Mouse per PC
-      stage.addEventListener('pointermove', (e) => handleMove(e.clientX, e.clientY));
-      stage.addEventListener('pointerleave', resetMove);
-    } else {
-      // Gestione Touch per Smartphone (trascinamento dito sulla carta)
-      let isTouching = false;
-      stage.addEventListener('touchstart', (e) => {
-        if (e.touches.length === 1) {
-          isTouching = true;
-          handleMove(e.touches[0].clientX, e.touches[0].clientY);
-          requestIOSOrientation(); // Richiede i permessi su iOS al primo tocco
-        }
-      }, { passive: true });
-
-      stage.addEventListener('touchmove', (e) => {
-        if (isTouching && e.touches.length === 1) {
-          handleMove(e.touches[0].clientX, e.touches[0].clientY);
-        }
-      }, { passive: true });
-
-      stage.addEventListener('touchend', () => {
-        isTouching = false;
-        resetMove();
-      });
-    }
-
-    // Gestione Giroscopio con richiesta permessi obbligatoria per iOS
-    function handleOrientation(e) {
-      if (e.gamma === null && e.beta === null) return;
-      const x = Math.max(-1, Math.min(1, e.gamma / 30));
-      const y = Math.max(-1, Math.min(1, (e.beta - 45) / 30));
-      
-      wrap.style.setProperty('--ry', (x * 14).toFixed(2) + 'deg');
-      wrap.style.setProperty('--rx', (y * -14).toFixed(2) + 'deg');
-      wrap.style.setProperty('--gx', (50 + x * 48).toFixed(1) + '%');
-      wrap.style.setProperty('--gy', (50 + y * 48).toFixed(1) + '%');
-      wrap.style.setProperty('--go', '1');
-    }
-
-    let requestedPermission = false;
-    function requestIOSOrientation() {
-      if (requestedPermission) return;
-      requestedPermission = true;
-
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        DeviceOrientationEvent.requestPermission()
-          .then(response => {
-            if (response === 'granted') {
-              window.addEventListener('deviceorientation', handleOrientation, { passive: true });
-            }
-          })
-          .catch(() => {});
-      } else {
-        window.addEventListener('deviceorientation', handleOrientation, { passive: true });
-      }
-    }
+  /* Scrive i valori una volta per fotogramma: il giroscopio manda decine di letture al secondo. */
+  function setTilt(x, y, go) {
+    if (reduceMotion) return;
+    tiltNext = { x: cl(x), y: cl(y), go };
+    if (tiltRaf) return;
+    tiltRaf = requestAnimationFrame(() => {
+      tiltRaf = 0;
+      const t = tiltNext;
+      wrap.style.setProperty('--nx', t.x.toFixed(3));
+      wrap.style.setProperty('--ny', t.y.toFixed(3));
+      wrap.style.setProperty('--gx', (50 - t.x * 48).toFixed(1) + '%');
+      wrap.style.setProperty('--gy', (50 - t.y * 48).toFixed(1) + '%');
+      wrap.style.setProperty('--go', String(t.go));
+    });
+  }
+  function tiltFromPoint(cx, cy) {
+    const r = wrap.getBoundingClientRect();
+    setTilt((cx - (r.left + r.width / 2)) / (r.width / 2), (cy - (r.top + r.height / 2)) / (r.height / 2), 1);
   }
 
-  let touchX = null;
+  const stage = $('#stage');
+  if (fine) {
+    stage.addEventListener('pointermove', (e) => { if (e.pointerType !== 'touch') tiltFromPoint(e.clientX, e.clientY); });
+    stage.addEventListener('pointerleave', () => setTilt(0, 0, 0));
+  }
+
+  /* Giroscopio: la carta segue l'inclinazione del telefono. La posizione "neutra"
+     si adatta piano piano a come lo tieni, quindi funziona da seduti o sdraiati. */
+  let gyroOn = false, gyroBase = null, fingerTilt = false, gyroAsked = false;
+  function onOrientation(e) {
+    if (e.beta == null || e.gamma == null) return;
+    let gx = e.gamma, gy = e.beta;
+    const ang = screen.orientation ? screen.orientation.angle : (window.orientation || 0);
+    if (ang === 90) [gx, gy] = [gy, -gx];
+    else if (ang === 270 || ang === -90) [gx, gy] = [-gy, gx];
+    else if (ang === 180) { gx = -gx; gy = -gy; }
+    if (!gyroBase) gyroBase = { x: gx, y: gy };
+    gyroBase.x += (gx - gyroBase.x) * 0.02;
+    gyroBase.y += (gy - gyroBase.y) * 0.02;
+    gyroOn = true;
+    if (fingerTilt || artOpen) return;
+    setTilt((gx - gyroBase.x) / 18, (gy - gyroBase.y) / 18, 0.9);
+  }
+  function enableGyro() {
+    if (gyroAsked || fine || reduceMotion || !window.DeviceOrientationEvent) return;
+    gyroAsked = true;
+    const start = () => window.addEventListener('deviceorientation', onOrientation, { passive: true });
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+      /* iPhone: il permesso si può chiedere solo dopo un tocco. */
+      DeviceOrientationEvent.requestPermission()
+        .then((r) => { if (r === 'granted') start(); })
+        .catch(() => { gyroAsked = false; });
+    } else {
+      start();
+    }
+  }
+  if (!fine && window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission !== 'function') enableGyro();
+  document.addEventListener('touchend', enableGyro, { passive: true });
+
+  /* Dito sulla carta:
+     - tocco breve: apre l'artwork
+     - scorrimento orizzontale: carta successiva/precedente
+     - scorrimento verticale: variante successiva/precedente
+     - tenere premuto e muovere: inclina la carta e sposta il riflesso */
+  let touch = null;
+  function endFingerTilt() {
+    fingerTilt = false;
+    if (!gyroOn) setTilt(0, 0, 0);
+  }
+  function cancelTouch() {
+    if (!touch) return;
+    clearTimeout(touch.timer);
+    if (touch.mode === 'tilt') endFingerTilt();
+    touch = null;
+  }
   document.addEventListener('touchstart', (e) => {
-    const onStrip = e.target instanceof Node && varPanel.contains(e.target);
-    touchX = e.touches.length === 1 && !onStrip ? e.touches[0].clientX : null;
+    cancelTouch();
+    if (e.touches.length !== 1 || !search.hidden) return;
+    if (e.target instanceof Node && varPanel.contains(e.target)) return;
+    const p = e.touches[0];
+    const t = { x0: p.clientX, y0: p.clientY, x: p.clientX, y: p.clientY, mode: 'pending', timer: 0 };
+    touch = t;
+    if (!artOpen && !reduceMotion && e.target instanceof Node && wrap.contains(e.target)) {
+      t.timer = setTimeout(() => {
+        if (touch !== t || t.mode !== 'pending') return;
+        t.mode = 'tilt'; fingerTilt = true;
+        tiltFromPoint(t.x, t.y);
+        if (navigator.vibrate) navigator.vibrate(8);
+      }, 220);
+    }
   }, { passive: true });
-  document.addEventListener('touchend', (e) => {
-    if (touchX === null || !search.hidden) return;
-    const dx = e.changedTouches[0].clientX - touchX;
-    if (Math.abs(dx) > 70) nav(dx < 0 ? 1 : -1);
-    touchX = null;
+  document.addEventListener('touchmove', (e) => {
+    if (!touch || e.touches.length !== 1) return;
+    touch.x = e.touches[0].clientX; touch.y = e.touches[0].clientY;
+    if (touch.mode === 'tilt') tiltFromPoint(touch.x, touch.y);
+    else if (touch.mode === 'pending' && Math.hypot(touch.x - touch.x0, touch.y - touch.y0) > 12) {
+      touch.mode = 'swipe'; clearTimeout(touch.timer);
+    }
   }, { passive: true });
+  document.addEventListener('touchend', () => {
+    if (!touch) return;
+    const t = touch; touch = null; clearTimeout(t.timer);
+    if (t.mode === 'tilt') { endFingerTilt(); swallowClick = Date.now(); return; }
+    if (t.mode !== 'swipe' || !search.hidden) return;
+    const dx = t.x - t.x0, dy = t.y - t.y0;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.2) nav(dx < 0 ? 1 : -1);
+    else if (Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx) * 1.2) stepVariant(dy < 0 ? 1 : -1);
+  }, { passive: true });
+  document.addEventListener('touchcancel', cancelTouch, { passive: true });
 
   const hashId = location.hash.slice(1);
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hashId)) loadById(hashId);
