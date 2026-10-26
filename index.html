@@ -148,6 +148,9 @@
   #searchBtn { top: max(16px, env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); }
   #backBtn   { top: max(16px, env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); }
   #flipBtn   { top: calc(max(16px, env(safe-area-inset-top, 0px)) + 58px); left: max(16px, env(safe-area-inset-left, 0px)); }
+  #motionBtn { top: calc(max(16px, env(safe-area-inset-top, 0px)) + 58px); right: max(16px, env(safe-area-inset-right, 0px)); }
+  #motionBtn { animation: motion-hint 2.4s ease-in-out 1s 3; }
+  @keyframes motion-hint { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-14deg); } 75% { transform: rotate(14deg); } }
 
   #search {
     position: fixed; inset: 0; z-index: 30;
@@ -328,6 +331,9 @@
 </section>
 <button id="flipBtn" class="corner" type="button" aria-label="Gira la carta" hidden>
   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/></svg>
+</button>
+<button id="motionBtn" class="corner" type="button" aria-label="Attiva il movimento della carta" title="Attiva il movimento della carta" hidden>
+  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2.2"/><path d="M11 18h2"/><path d="M3.5 9a8 8 0 0 0 0 6"/><path d="M20.5 9a8 8 0 0 1 0 6"/></svg>
 </button>
 <button id="searchBtn" class="corner" type="button" aria-label="Cerca carte">
   <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -832,21 +838,40 @@
     if (fingerTilt || artOpen) return;
     setTilt((gx - gyroBase.x) / 18, (gy - gyroBase.y) / 18, 0.9);
   }
-  function enableGyro() {
-    if (gyroAsked || fine || reduceMotion || !window.DeviceOrientationEvent) return;
+  const motionBtn = $('#motionBtn');
+  const startGyro = () => {
+    if (gyroAsked) return;
     gyroAsked = true;
-    const start = () => window.addEventListener('deviceorientation', onOrientation, { passive: true });
-    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-      /* iPhone: il permesso si può chiedere solo dopo un tocco. */
-      DeviceOrientationEvent.requestPermission()
-        .then((r) => { if (r === 'granted') start(); })
-        .catch(() => { gyroAsked = false; });
+    window.addEventListener('deviceorientation', onOrientation, { passive: true });
+  };
+  const needsPermission = !!window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function';
+
+  if (!fine && !reduceMotion && window.DeviceOrientationEvent) {
+    if (!needsPermission) {
+      /* Android: nessun permesso da chiedere. */
+      startGyro();
     } else {
-      start();
+      /* iPhone (Safari e app aggiunta alla schermata Home): il permesso va chiesto
+         con un tocco su un pulsante. Se era già stato concesso, parte da solo. */
+      DeviceOrientationEvent.requestPermission()
+        .then((r) => { if (r === 'granted') startGyro(); else motionBtn.hidden = false; })
+        .catch(() => { motionBtn.hidden = false; });
+      motionBtn.addEventListener('click', () => {
+        DeviceOrientationEvent.requestPermission()
+          .then((r) => {
+            if (r === 'granted') {
+              motionBtn.hidden = true;
+              startGyro();
+            } else {
+              msg(navigator.standalone
+                ? 'Permesso negato. Per riattivarlo elimina l’icona dalla schermata Home e aggiungila di nuovo.'
+                : 'Permesso negato. Chiudi e riapri la pagina per riprovare.', 6000);
+            }
+          })
+          .catch(() => msg('Il movimento non è disponibile su questo dispositivo.'));
+      });
     }
   }
-  if (!fine && window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission !== 'function') enableGyro();
-  document.addEventListener('touchend', enableGyro, { passive: true });
 
   /* Dito sulla carta:
      - tocco breve: apre l'artwork
