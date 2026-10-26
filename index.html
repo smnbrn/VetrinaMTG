@@ -1,0 +1,1283 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vetrina — Magic: The Gathering</title>
+
+<!-- App sulla schermata Home (iPhone/Android) -->
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Vetrina">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#08090c">
+
+<style>
+  /* Layout: una sola carta centrata a tutto schermo; ricerca e artwork sono livelli sopra. */
+  :root {
+    --bg: #08090c;
+    --bg-soft: #12141c;
+    --ink: #f0eee6;
+    --muted: #8b8e9a;
+    --accent: #dfb564;
+    --shadow: rgba(0, 0, 0, .75);
+    --radius-card: 4.75%;
+    --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color-scheme: dark;
+  }
+  @property --glow1 { syntax: '<color>'; inherits: true; initial-value: rgba(223,181,100,.08); }
+  @property --glow2 { syntax: '<color>'; inherits: true; initial-value: rgba(223,181,100,.08); }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; overscroll-behavior: none; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    transition: --glow1 .9s ease, --glow2 .9s ease;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(circle 600px at 50% 45%, var(--glow1), transparent 75%),
+      radial-gradient(ellipse 70% 70% at 50% 50%, var(--glow2), transparent 80%);
+    z-index: 0;
+  }
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .032;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    z-index: 1;
+  }
+
+  #stage {
+    position: fixed; inset: 0; z-index: 2;
+    display: grid; place-items: center;
+    padding: max(2vh, env(safe-area-inset-top, 0px)) max(2vw, env(safe-area-inset-right, 0px)) max(2vh, env(safe-area-inset-bottom, 0px)) max(2vw, env(safe-area-inset-left, 0px));
+    /* Sul telefono i gesti sulla carta li gestisce la pagina (niente zoom o "tira per aggiornare"). */
+    touch-action: none;
+  }
+  #stage { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  #wrap {
+    /* --nx / --ny: posizione del puntatore (o inclinazione del telefono) da -1 a 1. */
+    --nx: 0; --ny: 0; --tilt: 12deg;
+    height: min(92vh, calc(92vw * 680 / 488));
+    aspect-ratio: 488 / 680;
+    position: relative;
+    perspective: 1100px;
+  }
+  #wrap.loading::after {
+    content: ""; position: absolute; inset: 0;
+    border-radius: var(--radius-card);
+    background: linear-gradient(110deg, var(--bg-soft) 30%, #1a1e28 50%, var(--bg-soft) 70%);
+    background-size: 200% 100%;
+    animation: shimmer 1.2s linear infinite;
+  }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+
+  #cardBtn {
+    all: unset; display: block; width: 100%; height: 100%; cursor: zoom-in;
+    position: relative; border-radius: var(--radius-card);
+    transform: rotateX(calc(var(--ny) * var(--tilt) * -1)) rotateY(calc(var(--nx) * var(--tilt)));
+    transition: transform .18s cubic-bezier(.25, .46, .45, .94);
+    will-change: transform;
+  }
+  #cardBtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
+
+  #card {
+    display: block; width: 100%; height: 100%; object-fit: contain;
+    border-radius: var(--radius-card);
+    filter: drop-shadow(calc(var(--nx) * -10px) calc(var(--ny) * 12px + 28px) 45px var(--shadow));
+    transition: opacity .25s ease, filter .2s ease;
+    user-select: none; -webkit-user-select: none; -webkit-user-drag: none;
+    -webkit-touch-callout: none;
+  }
+  #wrap.loading #card { opacity: 0; }
+
+  #glare {
+    position: absolute; inset: 0; border-radius: var(--radius-card);
+    pointer-events: none; overflow: hidden;
+    opacity: var(--go, 0); transition: opacity .35s ease;
+    background: radial-gradient(circle at var(--gx, 50%) var(--gy, 50%),
+      rgba(255,255,255,.4), rgba(255,255,255,.12) 25%, transparent 55%);
+    mix-blend-mode: overlay;
+  }
+  #wrap.holo #glare::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(125deg,
+      transparent 15%, rgba(255,50,150,.45) 32%, rgba(255,220,50,.45) 42%,
+      rgba(50,255,180,.45) 52%, rgba(50,170,255,.45) 62%, rgba(200,90,255,.45) 75%, transparent 88%);
+    background-size: 260% 260%;
+    background-position: var(--gx, 50%) var(--gy, 50%);
+    mix-blend-mode: color-dodge; opacity: .3;
+  }
+  #wrap.loading #glare { opacity: 0; }
+
+  /* Telefono: l'ombra resta fissa (ricalcolarla a ogni movimento rallenta) e l'inclinazione è un po' più ampia. */
+  @media (hover: none) {
+    #wrap { --tilt: 14deg; }
+    #card { filter: drop-shadow(0 26px 40px var(--shadow)); transition: opacity .25s ease; }
+    #cardBtn { transition: transform .12s linear; }
+  }
+
+  #wrap.landscape {
+    height: auto;
+    width: min(92vw, calc(92vh * 680 / 488));
+    aspect-ratio: 680 / 488;
+  }
+  #wrap.landscape #card {
+    position: absolute; left: 50%; top: 50%;
+    width: calc(100% * 488 / 680); height: calc(100% * 680 / 488);
+    transform: translate(-50%, -50%) rotate(90deg);
+  }
+
+  .corner {
+    position: fixed; z-index: 10;
+    width: 46px; height: 46px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: rgba(18,20,28,.65); color: var(--ink);
+    border: 1px solid rgba(255,255,255,.1);
+    cursor: pointer; opacity: .4;
+    transition: opacity .2s ease, background .2s ease, transform .2s cubic-bezier(.34,1.56,.64,1), border-color .2s ease;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  .corner:hover, .corner:focus-visible {
+    opacity: 1; background: rgba(24,28,38,.9);
+    border-color: rgba(223,181,100,.3);
+    transform: scale(1.08);
+    outline: none;
+  }
+  .corner svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  #searchBtn { top: max(16px, env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); }
+  #randomBtn { top: max(16px, env(safe-area-inset-top, 0px)); right: calc(max(16px, env(safe-area-inset-right, 0px)) + 58px); }
+  #randomBtn.rolling svg { animation: dice-roll .6s cubic-bezier(.3,1.4,.5,1); }
+  #randomBtn[aria-busy="true"] { pointer-events: none; }
+  @keyframes dice-roll { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { #randomBtn.rolling svg { animation: none; } }
+  #backBtn   { top: max(16px, env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); }
+  #flipBtn   { top: calc(max(16px, env(safe-area-inset-top, 0px)) + 58px); left: max(16px, env(safe-area-inset-left, 0px)); }
+  #motionBtn { top: calc(max(16px, env(safe-area-inset-top, 0px)) + 58px); right: max(16px, env(safe-area-inset-right, 0px)); }
+  #motionBtn { animation: motion-hint 2.4s ease-in-out 1s 3; }
+  @keyframes motion-hint { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-14deg); } 75% { transform: rotate(14deg); } }
+
+  #search {
+    position: fixed; inset: 0; z-index: 30;
+    background: rgba(8,9,12,.9); backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    display: flex; flex-direction: column; align-items: center;
+    padding: max(6vh, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px));
+    gap: 18px; overflow-y: auto;
+  }
+  #searchForm { width: min(680px, 100%); }
+  #q {
+    width: 100%; padding: 14px 18px; font: inherit; font-size: 1.05rem;
+    color: var(--ink); background: var(--bg-soft);
+    border: 1px solid rgba(255,255,255,.12); border-radius: 12px;
+    transition: border-color .2s ease, box-shadow .2s ease;
+  }
+  #q:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(223,181,100,.15); }
+  #q::placeholder { color: var(--muted); }
+  #hint { margin: 0; min-height: 1.2em; color: var(--muted); font-size: .88rem; }
+  #grid {
+    width: min(1100px, 100%);
+    display: grid; gap: 16px; justify-content: center;
+    grid-template-columns: repeat(auto-fill, 150px);
+  }
+  #grid button {
+    all: unset; cursor: pointer; display: block; border-radius: 8%;
+    transition: transform .2s cubic-bezier(.34,1.56,.64,1), filter .2s ease;
+  }
+  #grid button:hover, #grid button:focus-visible { transform: translateY(-5px) scale(1.03); filter: brightness(1.1); }
+  #grid button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  #grid button.battle { aspect-ratio: 488 / 680; display: grid; place-items: center; }
+  #grid button.battle img { transform: rotate(90deg) scale(.718); }
+  #grid img { display: block; width: 100%; aspect-ratio: 488 / 680; object-fit: contain; background: transparent; border-radius: 6px; }
+
+  #art {
+    position: fixed; inset: 0; z-index: 40; cursor: zoom-out;
+    background: #000; overflow: hidden;
+    touch-action: none;
+  }
+  #artBg {
+    position: absolute; inset: -8%;
+    background-size: cover; background-position: center;
+    filter: blur(42px) brightness(.5) saturate(1.25);
+    transform: scale(1.1);
+  }
+  #artImg {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: contain;
+  }
+
+  #variants {
+    position: fixed; z-index: 5;
+    left: max(16px, env(safe-area-inset-left, 0px));
+    top: calc(max(16px, env(safe-area-inset-top, 0px)) + 116px);
+    bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    width: 242px;
+    display: flex; flex-direction: column; gap: 10px;
+    opacity: .6; transition: opacity .25s ease;
+  }
+  #variants:hover, #variants:focus-within { opacity: 1; }
+  #varTitle { margin: 0 0 0 4px; font-size: .78rem; letter-spacing: .05em; color: var(--muted); text-transform: uppercase; font-weight: 600; }
+  #varList {
+    display: flex; flex-direction: column; gap: 6px;
+    overflow-y: auto; min-height: 0; padding: 2px 6px 2px 2px;
+    scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.2) transparent;
+  }
+  #varList button {
+    all: unset; flex: none; cursor: pointer;
+    display: grid; grid-template-columns: 84px 1fr; align-items: center; gap: 10px;
+    padding: 6px; border-radius: 10px; border: 1px solid transparent;
+    background: rgba(255,255,255,.02);
+    transition: background .15s ease, border-color .15s ease, transform .15s ease;
+  }
+  #varList button:hover { background: rgba(255,255,255,.07); transform: translateX(2px); }
+  #varList button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #varList button[aria-current="true"] { background: rgba(223,181,100,.12); border-color: rgba(223,181,100,.45); }
+  #varList img {
+    display: block; width: 84px; aspect-ratio: 626 / 457; object-fit: cover;
+    border-radius: 6px; background: var(--bg-soft);
+  }
+  #varList .txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  #varList span {
+    font-size: .8rem; line-height: 1.25; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500;
+  }
+  #varList small { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .03em; }
+
+  @media (max-width: 980px) {
+    #variants {
+      top: auto; width: auto; right: max(16px, env(safe-area-inset-right, 0px));
+      left: max(16px, env(safe-area-inset-left, 0px));
+      opacity: 1; gap: 6px;
+    }
+    #varList { flex-direction: row; overflow-x: auto; overflow-y: hidden; padding: 2px 2px 8px; }
+    #varList button { grid-template-columns: 1fr; width: 104px; gap: 4px; }
+    #varList img { width: 100%; }
+    body.has-variants #wrap { height: min(68vh, calc(92vw * 680 / 488)); }
+    body.has-variants #stage { padding-bottom: 140px; }
+  }
+
+  #msg {
+    position: fixed; left: 50%; bottom: max(22px, env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%); z-index: 50;
+    padding: 10px 18px; border-radius: 10px;
+    background: rgba(18,20,28,.95); color: var(--ink);
+    border: 1px solid rgba(255,255,255,.12); font-size: .9rem;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5);
+    max-width: calc(100vw - 32px);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .corner {
+    width: 48px; height: 48px;
+    opacity: .68;
+    background: rgba(15,17,24,.72);
+    border-color: rgba(255,255,255,.13);
+    box-shadow: 0 8px 26px rgba(0,0,0,.18);
+  }
+  .corner:active { transform: scale(.96); }
+  #card { backface-visibility: hidden; }
+  #search {
+    background: rgba(7,8,11,.94);
+    gap: 14px;
+    padding-top: max(8vh, env(safe-area-inset-top, 0px));
+  }
+  #searchForm { position: sticky; top: 0; z-index: 2; }
+  #q { min-height: 52px; box-shadow: 0 12px 34px rgba(0,0,0,.18); }
+  #quickSearch {
+    width: min(680px, 100%);
+    display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px;
+    color: var(--muted); font-size: .78rem;
+  }
+  #quickSearch span { margin-right: 3px; }
+  #quickSearch button {
+    appearance: none; border: 1px solid rgba(255,255,255,.11); border-radius: 999px;
+    padding: 7px 11px; min-height: 34px; color: #d8d6ce; background: rgba(255,255,255,.035);
+    font: inherit; cursor: pointer; transition: background .18s ease, border-color .18s ease, color .18s ease;
+  }
+  #quickSearch button:hover, #quickSearch button:focus-visible {
+    color: var(--ink); border-color: rgba(223,181,100,.45); background: rgba(223,181,100,.09); outline: none;
+  }
+  #hint { text-align: center; }
+  #grid { gap: 18px; padding: 4px 2px 28px; }
+  #grid button { border-radius: 10px; overflow: hidden; }
+  #grid img { transition: filter .2s ease; }
+  #grid button:hover img { filter: drop-shadow(0 10px 16px rgba(0,0,0,.4)); }
+  #varTitle { letter-spacing: .08em; }
+  #varList button { background: rgba(18,20,28,.48); backdrop-filter: blur(8px); }
+  #varList button[aria-current="true"] { box-shadow: inset 0 0 0 1px rgba(223,181,100,.08); }
+  #msg { animation: msg-in .22s ease-out both; }
+  @keyframes msg-in { from { opacity: 0; transform: translate(-50%, 7px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+  /* ---------- Lista dei set (schermata iniziale, come scryfall.com/sets) ---------- */
+  #setsBtn { top: max(16px, env(safe-area-inset-top, 0px)); right: calc(max(16px, env(safe-area-inset-right, 0px)) + 116px); }
+  #sets {
+    position: fixed; inset: 0; z-index: 35;
+    background: var(--bg);
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 0 max(16px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  }
+  .sets-in { width: min(980px, 100%); margin: 0 auto; }
+  .sets-head {
+    position: sticky; top: 0; z-index: 2;
+    padding: max(18px, env(safe-area-inset-top, 0px)) 0 12px;
+    background: linear-gradient(var(--bg) 82%, rgba(8,9,12,0));
+    display: grid; grid-template-columns: 1fr auto; gap: 12px 10px; align-items: center;
+  }
+  .sets-head h1 { margin: 0; font-size: 1.35rem; font-weight: 650; letter-spacing: .01em; }
+  .sets-head h1 small { color: var(--muted); font-weight: 500; font-size: .85rem; margin-left: 8px; }
+  .sets-tools { display: flex; gap: 8px; }
+  .sets-tools button, #setsBack {
+    appearance: none; display: inline-flex; align-items: center; gap: 7px;
+    min-height: 40px; padding: 0 14px; border-radius: 999px; cursor: pointer;
+    font: inherit; font-size: .85rem; color: var(--ink);
+    background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12);
+    transition: background .18s ease, border-color .18s ease;
+  }
+  .sets-tools button:hover, .sets-tools button:focus-visible, #setsBack:hover, #setsBack:focus-visible {
+    background: rgba(223,181,100,.1); border-color: rgba(223,181,100,.45); outline: none;
+  }
+  .sets-tools svg, #setsBack svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  #setFilter {
+    grid-column: 1 / -1;
+    width: 100%; min-height: 48px; padding: 12px 16px; font: inherit; font-size: 1rem;
+    color: var(--ink); background: var(--bg-soft);
+    border: 1px solid rgba(255,255,255,.12); border-radius: 12px;
+  }
+  #setFilter:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(223,181,100,.15); }
+  #setFilter::placeholder { color: var(--muted); }
+  #setsHint { margin: 4px 0 10px; color: var(--muted); font-size: .85rem; min-height: 1.2em; }
+  .set-cols, .set-row {
+    display: grid; grid-template-columns: 30px minmax(0, 1fr) 64px 64px 96px;
+    align-items: center; gap: 12px; padding: 0 12px;
+  }
+  .set-cols {
+    color: var(--muted); font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; font-weight: 600;
+    padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .set-cols span:nth-child(n+3), .set-row .num { text-align: right; }
+  #setList { list-style: none; margin: 0; padding: 0; }
+  #setList li { border-bottom: 1px solid rgba(255,255,255,.05); content-visibility: auto; contain-intrinsic-size: auto 48px; }
+  .set-row {
+    all: unset; box-sizing: border-box; width: 100%; min-height: 48px; cursor: pointer;
+    display: grid; grid-template-columns: 30px minmax(0, 1fr) 64px 64px 96px;
+    align-items: center; gap: 12px; padding: 6px 12px; border-radius: 8px;
+    transition: background .15s ease;
+  }
+  .set-row:hover { background: rgba(255,255,255,.05); }
+  .set-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .set-row img { width: 24px; height: 24px; object-fit: contain; justify-self: center; filter: invert(.92); }
+  .set-row .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .93rem; }
+  .set-row .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem; color: var(--muted); text-transform: uppercase; text-align: right; }
+  .set-row .num, .set-row .date { color: var(--muted); font-size: .82rem; font-variant-numeric: tabular-nums; }
+  .set-row .date { text-align: right; }
+  .set-row .sub { display: none; }
+  #setList li.child .set-row { padding-left: calc(12px + var(--depth, 1) * 22px); }
+  #setList li.child .name { color: #c9c7bf; font-size: .87rem; }
+  #setList li.child .name::before { content: "↳ "; color: var(--muted); }
+  @media (max-width: 640px) {
+    .set-cols { display: none; }
+    .set-row { grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; padding: 8px 6px; }
+    .set-row .code, .set-row .date { display: none; }
+    .set-row .name { white-space: normal; line-height: 1.25; }
+    .set-row .sub { display: block; color: var(--muted); font-size: .72rem; margin-top: 2px; text-transform: none; }
+    #setList li.child .set-row { padding-left: calc(6px + var(--depth, 1) * 16px); }
+    .sets-tools .lbl { display: none; }
+    .sets-tools button { padding: 0; width: 40px; justify-content: center; }
+  }
+  #setsBack { align-self: center; margin-bottom: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #card, #cardBtn, #glare, body { transition: none; }
+    #wrap.loading::after { animation: none; }
+    #grid button, #varList button, #variants, .corner { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<main id="stage">
+  <div id="wrap" class="loading">
+    <button id="cardBtn" type="button" aria-label="Carta">
+      <img id="card" alt="" draggable="false">
+      <span id="glare" aria-hidden="true"></span>
+    </button>
+  </div>
+</main>
+
+<button id="backBtn" class="corner" type="button" aria-label="Torna ai risultati" title="Torna ai risultati" hidden>
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+</button>
+<section id="variants" hidden aria-label="Varianti di altri artisti">
+  <p id="varTitle"></p>
+  <div id="varList"></div>
+</section>
+<button id="flipBtn" class="corner" type="button" aria-label="Gira la carta" hidden>
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/></svg>
+</button>
+<button id="motionBtn" class="corner" type="button" aria-label="Attiva il movimento della carta" title="Attiva il movimento della carta" hidden>
+  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2.2"/><path d="M11 18h2"/><path d="M3.5 9a8 8 0 0 0 0 6"/><path d="M20.5 9a8 8 0 0 1 0 6"/></svg>
+</button>
+<button id="randomBtn" class="corner" type="button" aria-label="Carta casuale" title="Carta casuale (R)">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5"/><circle cx="8.5" cy="8.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1.1" fill="currentColor" stroke="none"/></svg>
+</button>
+<button id="searchBtn" class="corner" type="button" aria-label="Cerca carte">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+</button>
+<button id="setsBtn" class="corner" type="button" aria-label="Lista dei set" title="Lista dei set">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12"/><path d="M8 12h12"/><path d="M8 18h12"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/></svg>
+</button>
+
+<section id="sets" hidden aria-label="Set di Magic">
+  <div class="sets-in">
+    <header class="sets-head">
+      <h1>Set<small id="setsCount"></small></h1>
+      <div class="sets-tools">
+        <button id="setsSearch" type="button" aria-label="Cerca carte"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span class="lbl">Cerca carte</span></button>
+        <button id="setsRandom" type="button" aria-label="Carta casuale"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5"/><circle cx="9" cy="9" r=".6"/><circle cx="15" cy="15" r=".6"/><circle cx="15" cy="9" r=".6"/><circle cx="9" cy="15" r=".6"/></svg><span class="lbl">Carta casuale</span></button>
+        <button id="setsClose" type="button" aria-label="Torna alla carta" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+      </div>
+      <input id="setFilter" type="search" placeholder="Filtra per nome o codice del set…" aria-label="Filtra i set" enterkeyhint="search" autocomplete="off">
+    </header>
+    <p id="setsHint" role="status" aria-live="polite">Carico i set…</p>
+    <div class="set-cols" aria-hidden="true"><span></span><span>Nome</span><span>Codice</span><span>Carte</span><span>Uscita</span></div>
+    <ol id="setList"></ol>
+  </div>
+</section>
+
+<section id="search" hidden aria-label="Ricerca carte">
+  <button id="setsBack" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>Tutti i set</button>
+  <form id="searchForm" autocomplete="off">
+    <input id="q" type="search" placeholder="Nome carta o ricerca Scryfall…" aria-label="Cerca carte" enterkeyhint="search" aria-describedby="searchHelp">
+  </form>
+  <div id="quickSearch" aria-label="Ricerche di esempio">
+    <span id="searchHelp">Prova una ricerca</span>
+    <button type="button" data-query="t:dragon c:r">Draghi rossi</button>
+    <button type="button" data-query="t:legendary">Leggendarie</button>
+    <button type="button" data-query="rarity:mythic">Mitiche</button>
+  </div>
+  <p id="hint" role="status" aria-live="polite"></p>
+  <div id="grid"></div>
+</section>
+
+<div id="art" hidden role="dialog" aria-label="Artwork a schermo intero">
+  <div id="artBg"></div>
+  <img id="artImg" alt="">
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const API = 'https://api.scryfall.com';
+  const $ = (s) => document.querySelector(s);
+  const wrap = $('#wrap'), btn = $('#cardBtn'), img = $('#card');
+  const flipBtn = $('#flipBtn'), searchBtn = $('#searchBtn'), backBtn = $('#backBtn');
+  const search = $('#search'), form = $('#searchForm'), qEl = $('#q'), hintEl = $('#hint'), grid = $('#grid');
+  const art = $('#art'), artImg = $('#artImg'), artBg = $('#artBg');
+  const varPanel = $('#variants'), varTitle = $('#varTitle'), varList = $('#varList');
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const fine = matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+  let current = null, face = 0;
+  let list = [], index = 0;
+  let results = [];
+  let showToken = 0, searchToken = 0, debounceId = 0, msgId = 0;
+  let artOpen = false, closing = false;
+  let variantsToken = 0;
+  let varState = null;
+
+  let nextSlot = 0;
+  const cache = new Map();
+  async function sf(path) {
+    if (path.startsWith(API)) path = path.slice(API.length);
+    if (cache.has(path)) return cache.get(path);
+    const wait = Math.max(0, nextSlot - Date.now());
+    nextSlot = Date.now() + wait + 100;
+    if (wait) await new Promise((r) => setTimeout(r, wait));
+    const res = await fetch(API + path, { headers: { Accept: 'application/json;q=0.9,*/*;q=0.8' } });
+    if (!res.ok) { const e = new Error('HTTP ' + res.status); e.status = res.status; throw e; }
+    const data = await res.json();
+    if (!path.startsWith('/cards/random')) cache.set(path, data);
+    return data;
+  }
+
+  function faces(card) {
+    if (card.image_uris) return [card.image_uris];
+    return (card.card_faces || []).filter((f) => f.image_uris).map((f) => f.image_uris);
+  }
+  function isBattleFace(card, i) {
+    const f = card.card_faces && card.card_faces[i];
+    const t = (f && f.type_line) || card.type_line || '';
+    return /\bBattle\b/.test(t);
+  }
+  const thumbOf = (card) => { const f = faces(card)[0]; return f ? (f.small || f.normal) : ''; };
+
+  function msg(text, ms = 3500) {
+    let el = $('#msg');
+    if (!el) { el = document.createElement('div'); el.id = 'msg'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+    el.textContent = text;
+    clearTimeout(msgId);
+    msgId = setTimeout(() => el.remove(), ms);
+  }
+
+  const FX = {
+    next:  { out: [{ translate: '0 0', opacity: 1 }, { translate: '-7% 0', opacity: 0 }], inn: [{ translate: '7% 0', opacity: 0 }, { translate: '0 0', opacity: 1 }] },
+    prev:  { out: [{ translate: '0 0', opacity: 1 }, { translate: '7% 0', opacity: 0 }],  inn: [{ translate: '-7% 0', opacity: 0 }, { translate: '0 0', opacity: 1 }] },
+    flip:  { out: [{ rotate: 'y 0deg' }, { rotate: 'y 90deg' }], inn: [{ rotate: 'y -90deg' }, { rotate: 'y 0deg' }] },
+    fade:  { out: [{ opacity: 1 }, { opacity: 0 }], inn: [{ opacity: 0 }, { opacity: 1 }] },
+    down:  { out: [{ translate: '0 0', opacity: 1 }, { translate: '0 -5%', opacity: 0 }], inn: [{ translate: '0 5%', opacity: 0 }, { translate: '0 0', opacity: 1 }] },
+    up:    { out: [{ translate: '0 0', opacity: 1 }, { translate: '0 5%', opacity: 0 }],  inn: [{ translate: '0 -5%', opacity: 0 }, { translate: '0 0', opacity: 1 }] },
+  };
+  const TIMING = {
+    next: [170, 280], prev: [170, 280], flip: [160, 240], fade: [130, 240], down: [150, 260], up: [150, 260],
+  };
+  let fxAnim = null;
+
+  function loadSrc(u) {
+    const url = u && (u.png || u.large || u.normal);
+    if (!url) return Promise.resolve('');
+    return new Promise((resolve) => {
+      const probe = new Image();
+      probe.onload = () => resolve(url);
+      probe.onerror = () => resolve(u.large || u.normal || '');
+      probe.src = url;
+    });
+  }
+
+  const HUES = {
+    W: 'rgba(240,225,175,.12)', U: 'rgba(65,130,240,.16)', B: 'rgba(140,95,210,.15)',
+    R: 'rgba(235,70,50,.16)', G: 'rgba(50,185,105,.14)',
+  };
+  const DEFAULT_GLOW = 'rgba(223,181,100,.08)';
+  function applyGlow() {
+    const f = current.card_faces && current.card_faces[face];
+    let cs = (f && f.colors) || current.colors || [];
+    if (!cs.length) cs = current.color_identity || [];
+    const a = HUES[cs[0]] || DEFAULT_GLOW;
+    const b = HUES[cs[cs.length - 1]] || a;
+    document.body.style.setProperty('--glow1', a);
+    document.body.style.setProperty('--glow2', b);
+  }
+  const isHolo = (c) => c.rarity === 'mythic' || (Array.isArray(c.finishes) && c.finishes.length > 0 && !c.finishes.includes('nonfoil'));
+
+  async function setFace(mode) {
+    const my = ++showToken;
+    const u = faces(current)[face];
+    applyGlow();
+    wrap.classList.toggle('holo', isHolo(current));
+    if (fxAnim) { fxAnim.cancel(); fxAnim = null; }
+    if (!u) { msg('Immagine non disponibile per questa carta.'); wrap.classList.remove('loading'); return; }
+
+    const animated = mode && FX[mode] && !reduceMotion && typeof btn.animate === 'function';
+    if (!animated) {
+      wrap.classList.add('loading');
+      const src = await loadSrc(u);
+      if (my !== showToken) return;
+      wrap.classList.toggle('landscape', isBattleFace(current, face));
+      img.src = src; wrap.classList.remove('loading');
+      return;
+    }
+
+    const [tOut, tIn] = TIMING[mode];
+    const out = btn.animate(FX[mode].out, { duration: tOut, easing: 'cubic-bezier(.4,0,1,1)', fill: 'forwards' });
+    fxAnim = out;
+    const slow = setTimeout(() => { if (my === showToken) wrap.classList.add('loading'); }, 320);
+    const [src] = await Promise.all([loadSrc(u), out.finished.catch(() => {})]);
+    clearTimeout(slow);
+    if (my !== showToken) return;
+    wrap.classList.toggle('landscape', isBattleFace(current, face));
+    img.src = src;
+    try { await img.decode(); } catch (_) {}
+    if (my !== showToken) return;
+    wrap.classList.remove('loading');
+    const inn = btn.animate(FX[mode].inn, { duration: tIn, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    out.cancel();
+    fxAnim = inn;
+    inn.onfinish = () => { if (fxAnim === inn) fxAnim = null; };
+  }
+
+  function preload(card) {
+    if (!card) return;
+    faces(card).forEach((u) => {
+      if (u.art_crop) new Image().src = u.art_crop;
+    });
+  }
+
+  async function show(card, i, mode) {
+    current = card; face = 0;
+    document.title = (card.name ? card.name + ' — ' : '') + 'Vetrina · Magic';
+    if (typeof i === 'number') index = i;
+    btn.setAttribute('aria-label', card.name || 'Carta');
+    img.alt = card.name || '';
+    flipBtn.hidden = faces(card).length < 2;
+    try { history.replaceState(null, '', '#' + card.id); } catch (_) {}
+    preload(card);
+    backBtn.hidden = results.length === 0;
+    loadVariants(card, face);
+    if (artOpen) updateArt();
+    await setFace(mode);
+  }
+
+  function nav(d) {
+    if (list.length < 2) return;
+    index = (index + d + list.length) % list.length;
+    show(list[index], index, d > 0 ? 'next' : 'prev');
+  }
+
+  function flip() {
+    if (!current || faces(current).length < 2) return;
+    face = (face + 1) % faces(current).length;
+    setFace('flip');
+    loadVariants(current, face);
+    if (artOpen) updateArt();
+  }
+
+  async function loadRandom(mode) {
+    try {
+      const card = await sf('/cards/random');
+      list = [card]; index = 0;
+      await show(card, 0, mode);
+    } catch (e) { msg('Impossibile contattare Scryfall. Controlla la connessione.'); wrap.classList.remove('loading'); }
+  }
+
+  /* Pulsante dado: una nuova carta a caso, senza accodare richieste se lo premi di continuo. */
+  const randomBtn = $('#randomBtn');
+  async function rollRandom() {
+    if (randomBtn.getAttribute('aria-busy') === 'true') return;
+    randomBtn.setAttribute('aria-busy', 'true');
+    randomBtn.classList.remove('rolling'); void randomBtn.offsetWidth; randomBtn.classList.add('rolling');
+    try { await loadRandom('fade'); } finally { randomBtn.removeAttribute('aria-busy'); }
+  }
+  randomBtn.addEventListener('click', rollRandom);
+
+  async function loadById(id) {
+    try {
+      const card = await sf('/cards/' + encodeURIComponent(id));
+      list = [card]; index = 0;
+      await show(card, 0);
+    } catch (e) { openSets(); }
+  }
+
+  function openSearch(focus = true) {
+    closeSets(true);
+    search.hidden = false;
+    if (focus) { qEl.focus(); if (fine) qEl.select(); }
+  }
+  function closeSearch() {
+    if (search.contains(document.activeElement)) document.activeElement.blur();
+    search.hidden = true;
+    /* Nessuna carta ancora aperta: si torna alla lista dei set invece che a uno schermo vuoto. */
+    if (!current) openSets();
+  }
+
+  function renderGrid(cards, from = 0) {
+    if (!from) grid.textContent = '';
+    const frag = document.createDocumentFragment();
+    cards.slice(from).forEach((c, k) => {
+      const i = from + k;
+      const src = thumbOf(c); if (!src) return;
+      const b = document.createElement('button');
+      b.type = 'button'; b.title = c.name || ''; b.setAttribute('aria-label', c.name || 'Carta');
+      if (isBattleFace(c, 0)) b.classList.add('battle');
+      const im = document.createElement('img');
+      im.src = src; im.alt = ''; im.loading = 'lazy';
+      b.appendChild(im);
+      b.addEventListener('click', () => pick(i));
+      frag.appendChild(b);
+    });
+    grid.appendChild(frag);
+  }
+
+  function pick(i) {
+    list = results.slice(); index = i; listToken = searchToken;
+    current = current || list[i];
+    closeSearch();
+    show(list[i], i);
+  }
+
+  async function searchCards(q) {
+    const base = { unique: 'cards', order: 'name' };
+    const attempts = [{ q }];
+    if (!/\blang(uage)?:/i.test(q)) {
+      attempts.push(
+        { q: q + ' lang:it', include_multilingual: 'true' },
+        { q: q + ' lang:any', include_multilingual: 'true' }
+      );
+    }
+    let lastErr;
+    for (const a of attempts) {
+      try { return await sf('/cards/search?' + new URLSearchParams({ ...base, ...a })); }
+      catch (e) { if (e.status !== 404) throw e; lastErr = e; }
+    }
+    throw lastErr;
+  }
+
+  async function runSearch(openFirst) {
+    const q = qEl.value.trim();
+    if (!q) { ++searchToken; grid.textContent = ''; hintEl.textContent = ''; return; }
+    const setMatch = /^e:([a-z0-9]{2,6})$/i.exec(q);
+    if (setMatch) { const s = setsByCode.get(setMatch[1].toLowerCase()); if (s) return openSet(s, openFirst); }
+    const my = ++searchToken;
+    hintEl.textContent = 'Cerco…';
+    try {
+      const data = await searchCards(q);
+      if (my !== searchToken) return;
+      results = data.data || [];
+      renderGrid(results);
+      hintEl.textContent = data.total_cards > results.length ? `Prime ${results.length} carte su ${data.total_cards}. Restringi la ricerca per vederne altre.` : (data.total_cards === 1 ? '1 carta' : `${data.total_cards} carte`);
+      if (openFirst && results.length) pick(0);
+    } catch (e) {
+      if (my !== searchToken) return;
+      grid.textContent = '';
+      hintEl.textContent = e.status === 404 ? 'Nessuna carta trovata.' : 'Errore di rete. Riprova.';
+    }
+  }
+
+  /* ---------- Lista dei set (schermata iniziale) ---------- */
+  const setsEl = $('#sets'), setListEl = $('#setList'), setFilter = $('#setFilter');
+  const setsHint = $('#setsHint'), setsCount = $('#setsCount'), setsClose = $('#setsClose');
+  const setsByCode = new Map();
+  const SETS_KEY = 'vetrina.sets.v1', SETS_TTL = 12 * 3600e3;
+  let allSets = null, setsLoading = null, listToken = 0;
+
+  const fmtDate = (d) => {
+    if (!d) return '';
+    const [y, m] = d.split('-').map(Number);
+    try { return new Date(y, m - 1, 1).toLocaleDateString('it-IT', { month: 'short', year: 'numeric' }); }
+    catch (_) { return d.slice(0, 7); }
+  };
+
+  /* La lista dei set cambia di rado: la teniamo in memoria sul telefono per 12 ore, così l'app si apre subito. */
+  async function loadSets() {
+    if (allSets) return allSets;
+    if (!setsLoading) {
+      setsLoading = (async () => {
+        let data = null;
+        try {
+          const c = JSON.parse(localStorage.getItem(SETS_KEY) || 'null');
+          if (c && Array.isArray(c.d) && Date.now() - c.t < SETS_TTL) data = c.d;
+        } catch (_) {}
+        if (!data) {
+          const res = await sf('/sets');
+          data = (res.data || []).map((s) => ({
+            code: s.code, name: s.name, icon: s.icon_svg_uri || '', n: s.card_count || 0,
+            date: s.released_at || '', type: s.set_type || '', parent: s.parent_set_code || '',
+          }));
+          try { localStorage.setItem(SETS_KEY, JSON.stringify({ t: Date.now(), d: data })); } catch (_) {}
+        }
+        setsByCode.clear();
+        data.forEach((s) => setsByCode.set(s.code, s));
+        allSets = data;
+        return data;
+      })().finally(() => { setsLoading = null; });
+    }
+    return setsLoading;
+  }
+
+  /* Come su Scryfall: dal più recente, con i set "figli" (token, promo, commander…) sotto il set principale. */
+  function orderTree(sets) {
+    const kids = new Map(), roots = [];
+    sets.forEach((s) => {
+      if (s.parent && s.parent !== s.code && setsByCode.has(s.parent)) {
+        if (!kids.has(s.parent)) kids.set(s.parent, []);
+        kids.get(s.parent).push(s);
+      } else roots.push(s);
+    });
+    const byDate = (a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name);
+    const out = [], seen = new Set();
+    const walk = (s, depth) => {
+      if (seen.has(s.code)) return;
+      seen.add(s.code);
+      out.push([s, depth]);
+      (kids.get(s.code) || []).sort(byDate).forEach((k) => walk(k, depth + 1));
+    };
+    roots.sort(byDate).forEach((s) => walk(s, 0));
+    sets.forEach((s) => walk(s, 0)); /* eventuali cicli o orfani */
+    return out;
+  }
+
+  function renderSets() {
+    const frag = document.createDocumentFragment();
+    const span = (cls, text) => { const e = document.createElement('span'); e.className = cls; e.textContent = text; return e; };
+    orderTree(allSets).forEach(([s, depth]) => {
+      const li = document.createElement('li');
+      li.dataset.key = (s.name + ' ' + s.code).toLowerCase();
+      if (depth) { li.className = 'child'; li.style.setProperty('--depth', String(Math.min(depth, 3))); }
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'set-row';
+      b.title = `${s.name} (${s.code.toUpperCase()})`;
+      const im = document.createElement('img');
+      im.alt = ''; im.loading = 'lazy'; im.decoding = 'async';
+      if (s.icon) im.src = s.icon;
+      const nm = span('name', s.name);
+      const sub = document.createElement('small');
+      sub.className = 'sub';
+      sub.textContent = [s.code.toUpperCase(), fmtDate(s.date)].filter(Boolean).join(' · ');
+      nm.appendChild(sub);
+      b.append(im, nm, span('code', s.code), span('num', String(s.n)), span('date', fmtDate(s.date)));
+      b.addEventListener('click', () => openSet(s, false));
+      li.appendChild(b);
+      frag.appendChild(li);
+    });
+    setListEl.textContent = '';
+    setListEl.appendChild(frag);
+    setsCount.textContent = allSets.length ? String(allSets.length) : '';
+  }
+
+  function filterSets() {
+    const q = setFilter.value.trim().toLowerCase();
+    let n = 0;
+    for (const li of setListEl.children) {
+      const ok = !q || li.dataset.key.includes(q);
+      li.hidden = !ok;
+      if (ok) n++;
+    }
+    setsHint.textContent = q ? (n ? (n === 1 ? '1 set' : `${n} set`) : 'Nessun set trovato.') : '';
+  }
+
+  async function openSets() {
+    if (!search.hidden) {
+      if (search.contains(document.activeElement)) document.activeElement.blur();
+      search.hidden = true;
+    }
+    setsEl.hidden = false;
+    setsClose.hidden = !current;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
+    if (setListEl.children.length) return;
+    setsHint.textContent = 'Carico i set…';
+    try { await loadSets(); if (!setListEl.children.length) renderSets(); filterSets(); }
+    catch (_) { setsHint.textContent = 'Impossibile contattare Scryfall. Controlla la connessione e tocca di nuovo il pulsante dei set.'; }
+  }
+
+  function closeSets(silent) {
+    if (setsEl.hidden) return;
+    if (setsEl.contains(document.activeElement)) document.activeElement.blur();
+    setsEl.hidden = true;
+    if (current && !silent) { try { history.replaceState(null, '', '#' + current.id); } catch (_) {} }
+  }
+
+  /* Apre un set: tutte le sue carte nella griglia, in ordine di numero da collezione (scaricate a pagine). */
+  async function openSet(s, openFirst) {
+    const my = ++searchToken;
+    clearTimeout(debounceId);
+    qEl.value = 'e:' + s.code;
+    openSearch(false);
+    results = [];
+    grid.textContent = '';
+    hintEl.textContent = `${s.name} · carico le carte…`;
+    try { history.replaceState(null, '', '#set/' + s.code); } catch (_) {}
+    let path = '/cards/search?' + new URLSearchParams({
+      q: 'e:' + s.code, unique: 'prints', order: 'set', dir: 'asc',
+      include_extras: 'true', include_variations: 'true',
+    });
+    try {
+      while (path) {
+        const data = await sf(path);
+        if (my !== searchToken) return;
+        const page = data.data || [];
+        const from = results.length;
+        results.push(...page);
+        if (listToken === my) list.push(...page);
+        renderGrid(results, from);
+        const total = data.total_cards || results.length;
+        hintEl.textContent = data.has_more
+          ? `${s.name} · ${results.length} di ${total} carte…`
+          : `${s.name} · ${total === 1 ? '1 carta' : total + ' carte'}`;
+        path = data.has_more && data.next_page ? data.next_page : '';
+      }
+      if (openFirst && results.length) pick(0);
+    } catch (e) {
+      if (my !== searchToken) return;
+      hintEl.textContent = e.status === 404
+        ? `${s.name}: nessuna carta disponibile.`
+        : (results.length ? `${s.name} · ${results.length} carte (errore di rete, lista incompleta)` : 'Errore di rete. Riprova.');
+    }
+  }
+
+  setFilter.addEventListener('input', filterSets);
+  setFilter.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const first = [...setListEl.children].find((li) => !li.hidden);
+    if (first) first.querySelector('button').click();
+  });
+  $('#setsBtn').addEventListener('click', openSets);
+  $('#setsBack').addEventListener('click', openSets);
+  $('#setsSearch').addEventListener('click', () => openSearch(true));
+  $('#setsRandom').addEventListener('click', () => { closeSets(true); rollRandom(); });
+  setsClose.addEventListener('click', () => closeSets());
+
+  qEl.addEventListener('input', () => { clearTimeout(debounceId); debounceId = setTimeout(() => runSearch(false), 350); });
+  form.addEventListener('submit', (e) => { e.preventDefault(); clearTimeout(debounceId); runSearch(true); });
+  $('#quickSearch').addEventListener('click', (e) => {
+    const chip = e.target.closest('button[data-query]');
+    if (!chip) return;
+    qEl.value = chip.dataset.query;
+    clearTimeout(debounceId);
+    runSearch(false);
+    qEl.focus();
+  });
+  search.addEventListener('click', (e) => { if (e.target === search) closeSearch(); });
+  searchBtn.addEventListener('click', () => openSearch(true));
+  flipBtn.addEventListener('click', flip);
+  backBtn.addEventListener('click', () => openSearch(false));
+
+  const inset = (r, round) => {
+    const vw = innerWidth, vh = innerHeight;
+    return `inset(${Math.max(0, r.top)}px ${Math.max(0, vw - r.right)}px ${Math.max(0, vh - r.bottom)}px ${Math.max(0, r.left)}px round ${round}px)`;
+  };
+
+  function updateArt() {
+    const u = faces(current)[face];
+    if (!u || !u.art_crop) {
+      msg('Artwork non disponibile per questa carta.');
+      return false;
+    }
+    if (artImg.getAttribute('src') !== u.art_crop) {
+      artImg.src = u.art_crop;
+      artBg.style.backgroundImage = `url("${u.art_crop}")`;
+      if (!reduceMotion && !art.hidden) artImg.animate([{ opacity: .35 }, { opacity: 1 }], { duration: 220, easing: 'ease-out' });
+    }
+    artImg.alt = current.name || '';
+    return true;
+  }
+
+  const faceArt = (card, f) => { const fs = faces(card); const u = fs[f] || fs[0]; return u ? u.art_crop : ''; };
+  const faceArtist = (card, f) => (card.card_faces && card.card_faces[f] && card.card_faces[f].artist) || card.artist || '';
+  const faceIllus = (card, f) => (card.card_faces && card.card_faces[f] && card.card_faces[f].illustration_id) || card.illustration_id || '';
+
+  async function loadVariants(card, f) {
+    const my = ++variantsToken;
+    const oid = card.oracle_id || (card.card_faces && card.card_faces[0] && card.card_faces[0].oracle_id);
+    const q = oid ? 'oracleid:' + oid : '!"' + (card.name || '').replace(/"/g, '') + '"';
+    let vs = [];
+    try {
+      const data = await sf('/cards/search?' + new URLSearchParams({ q, unique: 'art', order: 'released', dir: 'asc' }));
+      vs = (data.data || []).filter((v) => faceArt(v, f));
+    } catch (_) { vs = []; }
+    if (my !== variantsToken) return;
+    const artists = new Set(vs.map((v) => faceArtist(v, f)).filter(Boolean));
+    if (vs.length < 2 || artists.size < 2) { hideVariants(); return; }
+    renderVariants(vs, f, artists.size);
+  }
+
+  function hideVariants() {
+    varState = null;
+    varPanel.hidden = true;
+    document.body.classList.remove('has-variants');
+  }
+
+  function renderVariants(vs, f, nArtists) {
+    varState = { vs, f };
+    const curIllus = faceIllus(current, face);
+    varTitle.textContent = `${vs.length} versioni · ${nArtists} artisti`;
+    varList.textContent = '';
+    const frag = document.createDocumentFragment();
+    let curBtn = null;
+    vs.forEach((v) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      const artist = faceArtist(v, f) || 'Artista sconosciuto';
+      b.title = `${artist} · ${v.set_name || ''}`;
+      const isCur = (curIllus && faceIllus(v, f) === curIllus) || v.id === current.id;
+      if (isCur) { b.setAttribute('aria-current', 'true'); curBtn = b; }
+      const im = document.createElement('img');
+      im.src = faceArt(v, f); im.alt = ''; im.loading = 'lazy';
+      const name = document.createElement('span'); name.textContent = artist;
+      const set = document.createElement('small'); set.textContent = (v.set || '') + (v.released_at ? ' · ' + v.released_at.slice(0, 4) : '');
+      const txt = document.createElement('div'); txt.className = 'txt';
+      txt.append(name, set);
+      b.append(im, txt);
+      b.addEventListener('click', (e) => { e.stopPropagation(); pickVariant(v, f); });
+      frag.appendChild(b);
+    });
+    varList.appendChild(frag);
+    varPanel.hidden = false;
+    document.body.classList.add('has-variants');
+    if (curBtn) curBtn.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
+  function stepVariant(d) {
+    if (!varState || varPanel.hidden) return false;
+    const { vs, f } = varState;
+    const cur = faceIllus(current, face);
+    let i = vs.findIndex((v) => v.id === current.id);
+    if (i < 0) i = vs.findIndex((v) => cur && faceIllus(v, f) === cur);
+    const next = vs[((i < 0 ? 0 : i + d) + vs.length) % vs.length];
+    pickVariant(next, f, d > 0 ? 'down' : 'up');
+    return true;
+  }
+
+  async function pickVariant(v, f, mode = 'fade') {
+    if (v.id === current.id) return;
+    if (list.length) list[index] = v; else { list = [v]; index = 0; }
+    current = v; face = Math.min(f, Math.max(0, faces(v).length - 1));
+    document.title = (v.name ? v.name + ' — ' : '') + 'Vetrina · Magic';
+    btn.setAttribute('aria-label', v.name || 'Carta');
+    img.alt = v.name || '';
+    flipBtn.hidden = faces(v).length < 2;
+    try { history.replaceState(null, '', '#' + v.id); } catch (_) {}
+    preload(v);
+    loadVariants(v, face);
+    if (artOpen) updateArt();
+    await setFace(mode);
+  }
+
+  varPanel.addEventListener('click', (e) => e.stopPropagation());
+
+  function openArt() {
+    if (!current || artOpen) return;
+    artOpen = true; closing = false;
+    if (!updateArt()) { artOpen = false; return; }
+    const r = img.getBoundingClientRect();
+    art.hidden = false;
+    if (!reduceMotion) {
+      art.animate(
+        [{ clipPath: inset(r, r.width * 0.0475) }, { clipPath: 'inset(0px 0px 0px 0px round 0px)' }],
+        { duration: 520, easing: 'cubic-bezier(.2,.8,.2,1)' }
+      );
+    }
+    if (art.requestFullscreen) art.requestFullscreen().catch(() => {});
+  }
+
+  function closeArt() {
+    if (!artOpen || closing) return;
+    closing = true;
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    const finish = () => { art.hidden = true; artOpen = false; closing = false; };
+    if (reduceMotion) return finish();
+    const r = img.getBoundingClientRect();
+    const a = art.animate(
+      [{ clipPath: 'inset(0px 0px 0px 0px round 0px)' }, { clipPath: inset(r, r.width * 0.0475) }],
+      { duration: 360, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' }
+    );
+    a.onfinish = () => { finish(); a.cancel(); };
+  }
+
+  /* Dopo aver inclinato la carta tenendo premuto, il rilascio non deve aprire l'artwork. */
+  let swallowClick = 0;
+  const tapOpen = () => { if (Date.now() - swallowClick > 450) openArt(); };
+  btn.addEventListener('click', tapOpen);
+  wrap.addEventListener('click', (e) => { if (e.target === wrap) tapOpen(); });
+  art.addEventListener('click', closeArt);
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && artOpen) closeArt(); });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (artOpen) { e.preventDefault(); closeArt(); }
+      else if (!search.hidden) closeSearch();
+      else if (!setsEl.hidden && current) closeSets();
+      return;
+    }
+    const typing = e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+    if ((e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); openSearch(); return; }
+    if (artOpen) {
+      if (e.key === 'ArrowRight') { e.preventDefault(); nav(1); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); nav(-1); }
+      else if (e.key === 'ArrowDown') { if (stepVariant(1)) e.preventDefault(); }
+      else if (e.key === 'ArrowUp') { if (stepVariant(-1)) e.preventDefault(); }
+      else if (e.key === 'f' || e.key === 'F') flip();
+      return;
+    }
+    if (typing || !search.hidden || !setsEl.hidden) return;
+    if (e.key === '/') { e.preventDefault(); openSearch(); }
+    else if (e.key === 'ArrowRight') nav(1);
+    else if (e.key === 'ArrowLeft') nav(-1);
+    else if (e.key === 'ArrowDown') { if (stepVariant(1)) e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { if (stepVariant(-1)) e.preventDefault(); }
+    else if (e.key === 'f' || e.key === 'F') flip();
+    else if (e.key === 'r' || e.key === 'R') rollRandom();
+    else if (e.key === 'Backspace' && results.length) { e.preventDefault(); openSearch(false); }
+    else if (e.key === 's' || e.key === 'S') openSets();
+  });
+
+  /* ---------- Inclinazione e riflesso: mouse, dito e giroscopio ---------- */
+  const cl = (v) => Math.max(-1, Math.min(1, v));
+  let tiltRaf = 0, tiltNext = null;
+
+  /* Scrive i valori una volta per fotogramma: il giroscopio manda decine di letture al secondo. */
+  function setTilt(x, y, go) {
+    if (reduceMotion) return;
+    tiltNext = { x: cl(x), y: cl(y), go };
+    if (tiltRaf) return;
+    tiltRaf = requestAnimationFrame(() => {
+      tiltRaf = 0;
+      const t = tiltNext;
+      wrap.style.setProperty('--nx', t.x.toFixed(3));
+      wrap.style.setProperty('--ny', t.y.toFixed(3));
+      wrap.style.setProperty('--gx', (50 - t.x * 48).toFixed(1) + '%');
+      wrap.style.setProperty('--gy', (50 - t.y * 48).toFixed(1) + '%');
+      wrap.style.setProperty('--go', String(t.go));
+    });
+  }
+  function tiltFromPoint(cx, cy) {
+    const r = wrap.getBoundingClientRect();
+    setTilt((cx - (r.left + r.width / 2)) / (r.width / 2), (cy - (r.top + r.height / 2)) / (r.height / 2), 1);
+  }
+
+  const stage = $('#stage');
+  if (fine) {
+    stage.addEventListener('pointermove', (e) => { if (e.pointerType !== 'touch') tiltFromPoint(e.clientX, e.clientY); });
+    stage.addEventListener('pointerleave', () => setTilt(0, 0, 0));
+  }
+
+  /* Giroscopio: la carta segue l'inclinazione del telefono. La posizione "neutra"
+     si adatta piano piano a come lo tieni, quindi funziona da seduti o sdraiati. */
+  let gyroOn = false, gyroBase = null, fingerTilt = false, gyroAsked = false, lastGyro = 0;
+  function onOrientation(e) {
+    if (e.beta == null || e.gamma == null) return;
+    let gx = e.gamma, gy = e.beta;
+    const ang = screen.orientation ? screen.orientation.angle : (window.orientation || 0);
+    if (ang === 90) [gx, gy] = [gy, -gx];
+    else if (ang === 270 || ang === -90) [gx, gy] = [-gy, gx];
+    else if (ang === 180) { gx = -gx; gy = -gy; }
+    if (!gyroBase) gyroBase = { x: gx, y: gy };
+    gyroBase.x += (gx - gyroBase.x) * 0.02;
+    gyroBase.y += (gy - gyroBase.y) * 0.02;
+    gyroOn = true; lastGyro = performance.now();
+    motionBtn.hidden = true;
+    if (fingerTilt || artOpen) return;
+    setTilt((gx - gyroBase.x) / 18, (gy - gyroBase.y) / 18, 0.9);
+  }
+  const motionBtn = $('#motionBtn');
+  const startGyro = () => {
+    if (gyroAsked) return;
+    gyroAsked = true;
+    window.addEventListener('deviceorientation', onOrientation, { passive: true });
+  };
+  const needsPermission = !!window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function';
+  const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+
+  if (!fine && !reduceMotion && window.DeviceOrientationEvent) {
+    if (!needsPermission) {
+      /* Android: nessun permesso da chiedere. */
+      startGyro();
+    } else {
+      /* iPhone. Il permesso si può chiedere solo dentro un tocco dell'utente, e nell'app
+         aggiunta alla schermata Home iOS non lo ricorda tra un avvio e l'altro: per questo
+         lo chiediamo al primo tocco qualsiasi (non solo sul pulsante), finché non arriva una risposta. */
+      let asking = false, decided = false;
+      const ask = (fromButton) => {
+        if (decided || asking) return;
+        asking = true;
+        DeviceOrientationEvent.requestPermission()
+          .then((r) => {
+            decided = true;
+            if (r === 'granted') { motionBtn.hidden = true; startGyro(); }
+            else {
+              motionBtn.hidden = false;
+              if (fromButton) msg(standalone
+                ? 'Permesso negato. Per riattivarlo elimina l’icona dalla schermata Home e aggiungila di nuovo.'
+                : 'Permesso negato. Chiudi e riapri la pagina per riprovare.', 6000);
+            }
+          })
+          .catch(() => { if (fromButton) msg('Il movimento non è disponibile su questo dispositivo.'); })
+          .finally(() => { asking = false; if (decided) stopAutoAsk(); });
+      };
+      const autoAsk = (e) => { if (e.target instanceof Node && motionBtn.contains(e.target)) return; ask(false); };
+      const stopAutoAsk = () => {
+        document.removeEventListener('touchend', autoAsk, true);
+        document.removeEventListener('click', autoAsk, true);
+      };
+      motionBtn.hidden = false;
+      /* Se in Safari era già stato concesso, parte subito senza tocchi. */
+      DeviceOrientationEvent.requestPermission()
+        .then((r) => { if (r === 'granted') { decided = true; motionBtn.hidden = true; stopAutoAsk(); startGyro(); } })
+        .catch(() => {});
+      document.addEventListener('touchend', autoAsk, true);
+      document.addEventListener('click', autoAsk, true);
+      motionBtn.addEventListener('click', (e) => { e.stopPropagation(); decided = false; ask(true); });
+    }
+  }
+
+  /* Movimento di riserva: finché il giroscopio non manda dati (permesso non ancora dato,
+     negato o sensore assente), la carta ondeggia piano e il riflesso resta visibile. */
+  if (!fine && !reduceMotion) {
+    let driftT0 = 0;
+    const drift = (ts) => {
+      requestAnimationFrame(drift);
+      const gyroLive = gyroOn && ts - lastGyro < 700;
+      if (gyroLive || fingerTilt || artOpen || document.hidden || !search.hidden || !setsEl.hidden || !current) { driftT0 = 0; return; }
+      if (!driftT0) driftT0 = ts;
+      const t = (ts - driftT0) / 1000;
+      const ramp = Math.min(1, t / 1.2);
+      setTilt(Math.sin(t * 0.7) * 0.32 * ramp, Math.sin(t * 0.5 + 0.8) * 0.22 * ramp, 0.55 * ramp);
+    };
+    requestAnimationFrame(drift);
+  }
+
+  /* Dito sulla carta:
+     - tocco breve: apre l'artwork
+     - scorrimento orizzontale: carta successiva/precedente
+     - scorrimento verticale: variante successiva/precedente
+     - tenere premuto e muovere: inclina la carta e sposta il riflesso */
+  let touch = null;
+  function endFingerTilt() {
+    fingerTilt = false;
+    if (!gyroOn) setTilt(0, 0, 0);
+  }
+  function cancelTouch() {
+    if (!touch) return;
+    clearTimeout(touch.timer);
+    if (touch.mode === 'tilt') endFingerTilt();
+    touch = null;
+  }
+  document.addEventListener('touchstart', (e) => {
+    cancelTouch();
+    if (e.touches.length !== 1 || !search.hidden || !setsEl.hidden) return;
+    if (e.target instanceof Node && varPanel.contains(e.target)) return;
+    const p = e.touches[0];
+    const t = { x0: p.clientX, y0: p.clientY, x: p.clientX, y: p.clientY, mode: 'pending', timer: 0 };
+    touch = t;
+    if (!artOpen && !reduceMotion && e.target instanceof Node && wrap.contains(e.target)) {
+      t.timer = setTimeout(() => {
+        if (touch !== t || t.mode !== 'pending') return;
+        t.mode = 'tilt'; fingerTilt = true;
+        tiltFromPoint(t.x, t.y);
+        if (navigator.vibrate) navigator.vibrate(8);
+      }, 220);
+    }
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (!touch || e.touches.length !== 1) return;
+    touch.x = e.touches[0].clientX; touch.y = e.touches[0].clientY;
+    if (touch.mode === 'tilt') tiltFromPoint(touch.x, touch.y);
+    else if (touch.mode === 'pending' && Math.hypot(touch.x - touch.x0, touch.y - touch.y0) > 12) {
+      touch.mode = 'swipe'; clearTimeout(touch.timer);
+    }
+  }, { passive: true });
+  document.addEventListener('touchend', () => {
+    if (!touch) return;
+    const t = touch; touch = null; clearTimeout(t.timer);
+    if (t.mode === 'tilt') { endFingerTilt(); swallowClick = Date.now(); return; }
+    if (t.mode !== 'swipe' || !search.hidden || !setsEl.hidden) return;
+    const dx = t.x - t.x0, dy = t.y - t.y0;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.2) nav(dx < 0 ? 1 : -1);
+    else if (Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx) * 1.2) stepVariant(dy < 0 ? 1 : -1);
+  }, { passive: true });
+  document.addEventListener('touchcancel', cancelTouch, { passive: true });
+
+  /* Avvio: #<id carta> apre quella carta, #set/<codice> apre quel set, altrimenti la lista dei set. */
+  const hashId = decodeURIComponent(location.hash.slice(1));
+  const setHash = /^set\/([a-z0-9]{2,8})$/i.exec(hashId);
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(hashId)) loadById(hashId);
+  else if (setHash) {
+    setsEl.hidden = false;
+    loadSets().then(() => {
+      const s = setsByCode.get(setHash[1].toLowerCase());
+      if (s) { renderSets(); openSet(s, false); } else openSets();
+    }).catch(() => openSets());
+  }
+  else openSets();
+})();
+</script>
+</body>
+</html>
