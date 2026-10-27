@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="Vetrina">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#08090c">
-<meta name="app-version" content="8">
+<meta name="app-version" content="13">
 
 <style>
   /* Layout: una sola carta centrata a tutto schermo; ricerca e artwork sono livelli sopra. */
@@ -256,6 +256,21 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500;
   }
   #varList small { color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .03em; }
+  #varList .indeck { color: var(--accent); font-size: .66rem; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+  /* Pulsante "Usa questa versione nel mazzo" */
+  #useInDeck {
+    position: fixed; z-index: 6; left: 50%; transform: translateX(-50%);
+    bottom: max(20px, env(safe-area-inset-bottom, 0px));
+    display: inline-flex; align-items: center; gap: 8px; max-width: calc(100vw - 32px);
+    min-height: 46px; padding: 0 18px; border-radius: 999px; border: 0; cursor: pointer;
+    background: var(--accent); color: #1b1408; font: inherit; font-weight: 650; font-size: .92rem;
+    box-shadow: 0 12px 30px rgba(0,0,0,.5);
+    animation: use-in .25s cubic-bezier(.2,.8,.2,1);
+  }
+  #useInDeck span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #useInDeck svg { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  @keyframes use-in { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  @media (max-width: 980px) { body.has-variants #useInDeck { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 194px); } }
 
   @media (max-width: 980px) {
     #variants {
@@ -448,10 +463,96 @@
   .deck-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .deck-meta { color: var(--muted); font-size: .8rem; margin-top: 4px; }
   .deck-colors { display: inline-flex; gap: 3px; margin-top: 6px; }
-  .deck-colors img, .mana img { width: 15px; height: 15px; display: block; }
+  /* Simboli di mana: tondi, con la stessa ombra che hanno sulle carte. */
+  .deck-colors img, .mana img {
+    width: 16px; height: 16px; display: block; flex: none;
+    border-radius: 50%; box-shadow: -1px 1px 0 rgba(0,0,0,.85);
+  }
   .deck-card .chev { color: var(--muted); font-size: 1.2rem; padding-right: 4px; }
   .deck-empty { color: var(--muted); text-align: center; padding: 48px 12px; line-height: 1.55; }
   #decks.wide .decks-in { width: min(1320px, 100%); }
+
+  /* Riepilogo del mazzo */
+  .deck-stats {
+    display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1.2fr) minmax(0, .8fr);
+    gap: 10px; margin: 4px 0 8px; max-width: 760px;
+  }
+  @media (max-width: 640px) { .deck-stats { grid-template-columns: 1fr 1fr; } .st-curve { grid-column: 1 / -1; } }
+  .st { min-width: 0; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.07); }
+  .st-k { margin-bottom: 10px; font-size: .68rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .curve { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; align-items: end; }
+  .curve .col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .curve .bar { width: 100%; max-width: 28px; min-height: 3px; border-radius: 5px 5px 2px 2px; background: linear-gradient(var(--accent), rgba(223,181,100,.5)); }
+  .curve .bar.zero { background: rgba(255,255,255,.08); }
+  .curve .n { font-size: .7rem; font-variant-numeric: tabular-nums; color: var(--ink); min-height: 1em; }
+  .curve .l { font-size: .68rem; color: var(--muted); }
+  .pipbar { display: flex; height: 8px; margin-bottom: 12px; border-radius: 999px; overflow: hidden; background: rgba(255,255,255,.06); }
+  .pipbar span { display: block; height: 100%; }
+  .pips { display: flex; flex-wrap: wrap; gap: 8px 12px; }
+  .pips .p { display: inline-flex; align-items: center; gap: 5px; font-size: .82rem; font-variant-numeric: tabular-nums; }
+  .pips .p img { width: 16px; height: 16px; border-radius: 50%; box-shadow: -1px 1px 0 rgba(0,0,0,.85); }
+  .st-big { font-size: 1.65rem; font-weight: 650; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .st-sub { margin-top: 5px; color: var(--muted); font-size: .76rem; line-height: 1.45; }
+  .st-none { color: var(--muted); font-size: .82rem; }
+
+  /* Avviso dopo un'importazione con carte non trovate */
+  .deck-notice {
+    max-width: 760px; margin: 4px 0 10px; padding: 10px 10px 10px 14px; border-radius: 12px;
+    background: rgba(239,90,93,.08); border: 1px solid rgba(239,90,93,.35);
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: start;
+    font-size: .85rem; line-height: 1.45;
+  }
+  .deck-notice b { display: block; margin-bottom: 2px; }
+  .deck-notice span { color: #d9b8b8; overflow-wrap: anywhere; }
+  .deck-notice button { all: unset; cursor: pointer; color: var(--muted); padding: 0 6px; font-size: 1.2rem; line-height: 1; }
+
+  /* Finestra "Importa una lista" */
+  #importSheet {
+    position: fixed; inset: 0; z-index: 45; background: rgba(0,0,0,.55);
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .sheet.import { width: min(560px, 100%); }
+  .sheet-head.two { grid-template-columns: minmax(0, 1fr) auto; }
+  @media (max-width: 640px) { #importSheet { align-items: flex-end; padding: 0; } }
+  .import-body { padding: 14px 16px 4px; display: grid; gap: 10px; overflow-y: auto; }
+  #importName, #importText {
+    width: 100%; padding: 11px 14px; font: inherit; font-size: 1rem; color: var(--ink);
+    background: var(--bg-soft); border: 1px solid rgba(255,255,255,.12); border-radius: 11px;
+  }
+  #importText { min-height: 210px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88rem; line-height: 1.5; }
+  #importName:focus, #importText:focus { outline: none; border-color: var(--accent); }
+  .import-hint { margin: 0; color: var(--muted); font-size: .8rem; line-height: 1.45; }
+  .import-foot { padding: 12px 16px 16px; display: flex; justify-content: flex-end; gap: 8px; }
+  .primary {
+    appearance: none; min-height: 46px; padding: 0 20px; border-radius: 11px; border: 0; cursor: pointer;
+    background: var(--accent); color: #1b1408; font: inherit; font-weight: 650;
+  }
+  .primary:disabled { opacity: .6; cursor: progress; }
+  /* Ricerca per aggiungere carte dentro il mazzo */
+  .deck-add { margin: 2px 0 10px; max-width: 760px; }
+  .deck-add-input {
+    width: 100%; min-height: 48px; padding: 12px 16px 12px 42px; font: inherit; font-size: 1rem;
+    color: var(--ink); border: 1px solid rgba(255,255,255,.12); border-radius: 12px;
+    background: var(--bg-soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b8e9a' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 14px center / 18px;
+  }
+  .deck-add-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(223,181,100,.15); }
+  .deck-add-input::placeholder { color: var(--muted); }
+  .deck-add-hint { margin: 6px 4px 0; color: var(--muted); font-size: .8rem; }
+  .deck-add-hint:empty { display: none; }
+  .deck-add-results {
+    list-style: none; margin: 8px 0 0; padding: 6px; max-height: min(52vh, 430px); overflow-y: auto;
+    background: #12141b; border: 1px solid rgba(255,255,255,.1); border-radius: 14px;
+    box-shadow: 0 18px 50px rgba(0,0,0,.45);
+  }
+  .dres { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 6px 8px; border-radius: 10px; cursor: pointer; }
+  .dres:hover, .dres[aria-selected="true"] { background: rgba(255,255,255,.06); }
+  .dres > img { width: 40px; aspect-ratio: 488 / 680; border-radius: 3px; object-fit: cover; display: block; background: var(--bg-soft); }
+  .dres .t { min-width: 0; }
+  .dres .t b, .dres .t small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dres .t b { font-weight: 560; }
+  .dres .t small { color: var(--muted); font-size: .75rem; margin-top: 2px; }
+  .dres.has .t b { color: var(--accent); }
+  @media (max-width: 640px) { .dres { grid-template-columns: 40px minmax(0, 1fr) auto; } .dres .mana { display: none; } }
   /* Interruttore Elenco / Visuale */
   .seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12); }
   .seg button {
@@ -516,7 +617,8 @@
     font-size: .95rem; padding: 6px 0;
   }
   .deck-row .nm:hover, .deck-row .nm:focus-visible { color: var(--accent); }
-  .mana { display: inline-flex; gap: 2px; }
+  .mana { display: inline-flex; align-items: center; gap: 3px; flex-wrap: nowrap; }
+  .mana .sep { color: var(--muted); font-size: .8rem; margin: 0 3px; }
   .step { display: inline-flex; align-items: center; gap: 4px; }
   .step button {
     appearance: none; width: 32px; height: 32px; border-radius: 9px; cursor: pointer;
@@ -598,6 +700,9 @@
 
 <button id="backBtn" class="corner" type="button" aria-label="Torna ai risultati" title="Torna ai risultati" hidden>
   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+</button>
+<button id="useInDeck" type="button" hidden>
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span></span>
 </button>
 <section id="variants" hidden aria-label="Varianti di altri artisti">
   <p id="varTitle"></p>
@@ -684,6 +789,21 @@
   </div>
 </div>
 
+<div id="importSheet" hidden role="dialog" aria-modal="true" aria-labelledby="importTitle">
+  <div class="sheet import">
+    <div class="sheet-head two">
+      <div style="min-width:0"><p class="sheet-k">Mazzi</p><h2 id="importTitle">Importa una lista</h2></div>
+      <button id="importClose" class="x" type="button" aria-label="Chiudi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </div>
+    <div class="import-body">
+      <input id="importName" type="text" maxlength="60" placeholder="Nome del mazzo" aria-label="Nome del mazzo" autocomplete="off">
+      <textarea id="importText" placeholder="4 Lightning Bolt&#10;4 Monastery Swiftspear (ONE) 208&#10;20 Mountain" aria-label="Lista delle carte" spellcheck="false"></textarea>
+      <p id="importHint" class="import-hint">Una carta per riga, come le esportano Arena, Moxfield o MTGO; i nomi vanno in inglese. Le carte del sideboard vengono saltate.</p>
+    </div>
+    <div class="import-foot"><button id="importGo" class="primary" type="button">Crea il mazzo</button></div>
+  </div>
+</div>
+
 <div id="art" hidden role="dialog" aria-label="Artwork a schermo intero">
   <div id="artBg"></div>
   <img id="artImg" alt="">
@@ -693,7 +813,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '8';
+  const VERSION = '13';
   const API = 'https://api.scryfall.com';
   const $ = (s) => document.querySelector(s);
   const wrap = $('#wrap'), btn = $('#cardBtn'), img = $('#card');
@@ -874,6 +994,7 @@
     backBtn.hidden = !canGoBack();
     loadVariants(card, face);
     updateAddBadge();
+    syncUseInDeck();
     if (artOpen) updateArt();
     await setFace(mode);
   }
@@ -895,7 +1016,7 @@
   async function loadRandom(mode) {
     try {
       const card = await sf('/cards/random');
-      list = [card]; index = 0;
+      list = [card]; index = 0; deckSlots = null;
       await show(card, 0, mode);
     } catch (e) { msg('Impossibile contattare Scryfall. Controlla la connessione.'); wrap.classList.remove('loading'); }
   }
@@ -913,7 +1034,7 @@
   async function loadById(id) {
     try {
       const card = await sf('/cards/' + encodeURIComponent(id));
-      list = [card]; index = 0;
+      list = [card]; index = 0; deckSlots = null;
       await show(card, 0);
     } catch (e) { openSets(); }
   }
@@ -953,7 +1074,7 @@
 
   function pick(i) {
     list = results.slice(); index = i; listToken = searchToken;
-    returnTo = 'search';
+    returnTo = 'search'; deckSlots = null;
     current = current || list[i];
     closeSearch();
     show(list[i], i);
@@ -1224,7 +1345,7 @@
     } catch (_) { vs = []; }
     if (my !== variantsToken) return;
     const artists = new Set(vs.map((v) => faceArtist(v, f)).filter(Boolean));
-    if (vs.length < 2 || artists.size < 2) { hideVariants(); return; }
+    if (vs.length < 2 || (artists.size < 2 && !deckSlot())) { hideVariants(); return; }
     renderVariants(vs, f, artists.size);
   }
 
@@ -1237,7 +1358,11 @@
   function renderVariants(vs, f, nArtists) {
     varState = { vs, f };
     const curIllus = faceIllus(current, face);
-    varTitle.textContent = `${vs.length} versioni · ${nArtists} artisti`;
+    const slot = deckSlot();
+    const inDeckIllus = slot ? faceIllus(slot.entry.card, f) : '';
+    varTitle.textContent = slot
+      ? `Scegli la versione per il mazzo · ${vs.length}`
+      : `${vs.length} versioni · ${nArtists} ${nArtists === 1 ? 'artista' : 'artisti'}`;
     varList.textContent = '';
     const frag = document.createDocumentFragment();
     let curBtn = null;
@@ -1254,6 +1379,10 @@
       const set = document.createElement('small'); set.textContent = (v.set || '') + (v.released_at ? ' · ' + v.released_at.slice(0, 4) : '');
       const txt = document.createElement('div'); txt.className = 'txt';
       txt.append(name, set);
+      if (slot && ((inDeckIllus && faceIllus(v, f) === inDeckIllus) || v.id === slot.entry.card.id)) {
+        const tag = document.createElement('small'); tag.className = 'indeck'; tag.textContent = 'Nel mazzo';
+        txt.appendChild(tag);
+      }
       b.append(im, txt);
       b.addEventListener('click', (e) => { e.stopPropagation(); pickVariant(v, f); });
       frag.appendChild(b);
@@ -1287,6 +1416,7 @@
     preload(v);
     loadVariants(v, face);
     updateAddBadge();
+    syncUseInDeck();
     if (artOpen) updateArt();
     await setFace(mode);
   }
@@ -1349,6 +1479,7 @@
     altAlone = false;
     if (e.key === 'Escape') {
       if (artOpen) { e.preventDefault(); closeArt(); }
+      else if (!importSheet.hidden) closeImport();
       else if (!addSheet.hidden) closeAddSheet();
       else if (!search.hidden) closeSearch();
       else if (!decksEl.hidden) { if (deckView) openDecks(); else closeDecks(); }
@@ -1396,7 +1527,7 @@
   const addSheet = $('#addSheet'), addList = $('#addList'), addTitle = $('#addTitle'), addThumb = $('#addThumb');
   const addBtn = $('#addBtn'), newDeckForm = $('#newDeckForm'), newDeckName = $('#newDeckName');
   const DECKS_KEY = 'vetrina.decks.v1';
-  let decks = [], deckView = null, returnTo = null, storeWarned = false;
+  let decks = [], deckView = null, returnTo = null, storeWarned = false, deckSlots = null;
   try { const d = JSON.parse(localStorage.getItem(DECKS_KEY) || '[]'); if (Array.isArray(d)) decks = d; } catch (_) {}
 
   function saveDecks() {
@@ -1444,7 +1575,12 @@
   function manaEl(cost) {
     const wrapEl = document.createElement('span');
     wrapEl.className = 'mana';
-    (cost || '').replace(/\{([^}]+)\}/g, (_, sym) => {
+    (cost || '').replace(/\{([^}]+)\}|\s*\/\/\s*/g, (m, sym) => {
+      if (!sym) {
+        const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '//';
+        if (wrapEl.childNodes.length) wrapEl.appendChild(sep);
+        return '';
+      }
       const im = document.createElement('img');
       im.alt = '{' + sym + '}'; im.loading = 'lazy'; im.decoding = 'async';
       im.src = 'https://svgs.scryfall.io/card-symbols/' + encodeURIComponent(sym.replace(/\//g, '')) + '.svg';
@@ -1457,7 +1593,7 @@
   const frontType = (c) => (c.card_faces && c.card_faces[0] && c.card_faces[0].type_line) || c.type_line || '';
   const SECTIONS = [
     ['Creature', /\bCreature\b/], ['Planeswalker', /\bPlaneswalker\b/], ['Battaglie', /\bBattle\b/],
-    ['Istantanei', /\bInstant\b/], ['Stregonerie', /\bSorcery\b/], ['Terre', /\bLand\b/],
+    ['Istantanee', /\bInstant\b/], ['Stregonerie', /\bSorcery\b/], ['Terre', /\bLand\b/],
     ['Artefatti', /\bArtifact\b/], ['Incantesimi', /\bEnchantment\b/], ['Altro', /./],
   ];
   function grouped(d) {
@@ -1498,8 +1634,9 @@
   const I_EDIT = '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>';
   const I_COPY = '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>';
   const I_TRASH = '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/>';
+  const I_PASTE = '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11v6"/><path d="m9 14 3 3 3-3"/>';
 
-  function overlayOpen() { return !search.hidden || !setsEl.hidden || !decksEl.hidden || !addSheet.hidden; }
+  function overlayOpen() { return !search.hidden || !setsEl.hidden || !decksEl.hidden || !addSheet.hidden || !importSheet.hidden; }
 
   /* --- Elenco dei mazzi --- */
   function openDecks(id) {
@@ -1509,6 +1646,7 @@
     decksEl.hidden = false;
     deckView = id && deckById(id) ? id : null;
     decksEl.classList.remove('wide');
+    delete decksBody.dataset.deck;
     if (deckView) renderDeck(deckById(deckView)); else renderDeckList();
     decksEl.scrollTop = 0;
   }
@@ -1521,7 +1659,114 @@
     if (!silent && !current) openSets();
   }
 
+  /* La casella di ricerca resta la stessa mentre il mazzo si aggiorna, così non perde il testo né il focus. */
+  function deckBodyFor(d) {
+    let content = decksBody.querySelector(':scope > .deck-content');
+    if (decksBody.dataset.deck !== d.id || !content) {
+      decksBody.textContent = '';
+      decksBody.dataset.deck = d.id;
+      content = document.createElement('div'); content.className = 'deck-content';
+      decksBody.append(buildDeckAdd(d), content);
+    }
+    return content;
+  }
+
+  function buildDeckAdd(d) {
+    const box = document.createElement('div'); box.className = 'deck-add';
+    const inp = document.createElement('input');
+    inp.type = 'search'; inp.className = 'deck-add-input'; inp.autocomplete = 'off';
+    inp.placeholder = 'Aggiungi carte: cerca per nome o con la sintassi di Scryfall';
+    inp.setAttribute('aria-label', 'Cerca una carta da aggiungere al mazzo');
+    inp.setAttribute('enterkeyhint', 'search');
+    const hint = document.createElement('p'); hint.className = 'deck-add-hint'; hint.setAttribute('role', 'status');
+    const ul = document.createElement('ul'); ul.className = 'deck-add-results'; ul.hidden = true; ul.setAttribute('role', 'listbox');
+    let tok = 0, timer = 0, res = [], hi = 0;
+
+    const add = (c, delta) => {
+      const q = qtyIn(d, c) + delta;
+      setQty(d, c, q);
+      renderDeck(d);
+      draw();
+      if (delta > 0) msg((q === 1 ? 'Aggiunta: ' : 'Ora hai ' + q + '× ') + shownName(c), 1600);
+    };
+    function draw() {
+      ul.textContent = '';
+      res.forEach((c, i) => {
+        const q = qtyIn(d, c);
+        const li = document.createElement('li'); li.className = 'dres' + (q ? ' has' : '');
+        li.setAttribute('role', 'option'); li.setAttribute('aria-selected', String(i === hi));
+        const f = faceUris(c, 0);
+        const im = document.createElement('img'); im.alt = ''; im.loading = 'lazy';
+        im.src = f ? (f.small || f.normal || '') : '';
+        const t = document.createElement('div'); t.className = 't';
+        const b = document.createElement('b'); b.textContent = shownName(c);
+        const sm = document.createElement('small'); sm.textContent = frontType(c) + (q ? ' · nel mazzo: ' + q : '');
+        t.append(b, sm);
+        const step = document.createElement('span'); step.className = 'step';
+        const minus = document.createElement('button'); minus.type = 'button'; minus.textContent = '−'; minus.disabled = !q; minus.setAttribute('aria-label', 'Togli una copia');
+        const n = document.createElement('span'); n.className = 'n'; n.textContent = String(q);
+        const plus = document.createElement('button'); plus.type = 'button'; plus.textContent = '+'; plus.setAttribute('aria-label', 'Aggiungi una copia');
+        minus.addEventListener('click', (e) => { e.stopPropagation(); add(c, -1); });
+        plus.addEventListener('click', (e) => { e.stopPropagation(); add(c, 1); });
+        step.append(minus, n, plus);
+        li.append(im, t, manaEl(frontCost(c)), step);
+        li.addEventListener('click', () => { hi = i; add(c, 1); });
+        if (fine) {
+          li.addEventListener('mouseenter', (ev) => showPeek(c, ev));
+          li.addEventListener('mousemove', movePeek);
+          li.addEventListener('mouseleave', hidePeek);
+        }
+        ul.appendChild(li);
+      });
+      ul.hidden = !res.length;
+    }
+    /* timer torna a 0 appena la ricerca parte: così Invio sa se può già aggiungere la carta. */
+    async function run() {
+      clearTimeout(timer); timer = 0;
+      const q = inp.value.trim();
+      const my = ++tok;
+      if (!q) { res = []; draw(); hint.textContent = ''; return; }
+      hint.textContent = 'Cerco…';
+      try {
+        const data = await searchCards(q);
+        if (my !== tok) return;
+        res = (data.data || []).filter((c) => faces(c).length).slice(0, 30);
+        hi = 0;
+        draw();
+        hint.textContent = data.total_cards > res.length
+          ? `Prime ${res.length} carte su ${data.total_cards}: scrivi qualcosa in più per restringere.` : '';
+      } catch (e) {
+        if (my !== tok) return;
+        res = []; draw();
+        hint.textContent = e.status === 404 ? 'Nessuna carta trovata.' : 'Errore di rete. Riprova.';
+      }
+    }
+    const moveHi = (dlt) => {
+      if (!res.length) return;
+      hi = (hi + dlt + res.length) % res.length;
+      [...ul.children].forEach((li, i) => li.setAttribute('aria-selected', String(i === hi)));
+      ul.children[hi].scrollIntoView({ block: 'nearest' });
+    };
+    inp.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 300); });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); moveHi(1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); moveHi(-1); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        /* Invio: aggiunge la carta evidenziata; se la ricerca non è ancora partita, la avvia. */
+        if (res.length && !timer) add(res[hi], 1);
+        else run();
+      } else if (e.key === 'Escape' && (inp.value || res.length)) {
+        e.preventDefault(); e.stopPropagation();
+        inp.value = ''; res = []; draw(); hint.textContent = ''; hidePeek();
+      }
+    });
+    box.append(inp, hint, ul);
+    return box;
+  }
+
   function renderDeckList() {
+    delete decksBody.dataset.deck;
     decksHead.textContent = '';
     const h = document.createElement('h1');
     h.textContent = 'I miei mazzi';
@@ -1533,6 +1778,7 @@
       const d = createDeck(name);
       openDecks(d.id);
     }));
+    tools.appendChild(pill('Importa lista', I_PASTE, () => openImport()));
     if (current) tools.appendChild(pill('Torna alla carta', I_X, () => closeDecks()));
     decksHead.append(h, tools);
 
@@ -1576,6 +1822,7 @@
     const tools = document.createElement('div'); tools.className = 'decks-tools';
     tools.append(
       pill('Rinomina', I_EDIT, () => startRename(d, h)),
+      pill('Incolla lista', I_PASTE, () => openImport(d.id)),
       pill('Copia lista', I_COPY, () => exportDeck(d)),
       pill('Elimina', I_TRASH, () => {
         if (!confirm('Eliminare il mazzo «' + d.name + '»?')) return;
@@ -1589,15 +1836,18 @@
     tools.prepend(viewSwitch(d));
     decksHead.append(back, h, tools);
 
-    decksBody.textContent = '';
+    const content = deckBodyFor(d);
+    content.textContent = '';
     decksEl.classList.toggle('wide', deckMode === 'visual' && d.cards.length > 0);
     if (!d.cards.length) {
       const p = document.createElement('p'); p.className = 'deck-empty';
-      p.textContent = 'Il mazzo è vuoto. Apri una carta e tocca il pulsante + per aggiungerla.';
-      decksBody.appendChild(p);
+      p.textContent = 'Il mazzo è vuoto. Cerca una carta qui sopra per aggiungerla, oppure aprila e tocca il pulsante +.';
+      content.appendChild(p);
       return;
     }
-    if (deckMode === 'visual') { renderDeckVisual(d); return; }
+    if (importNotice && importNotice.deck === d.id) content.appendChild(noticeEl(d));
+    content.appendChild(deckStats(d));
+    if (deckMode === 'visual') { renderDeckVisual(d, content); return; }
     const order = [];
     grouped(d).forEach((g) => {
       const sec = document.createElement('section'); sec.className = 'deck-sec';
@@ -1626,8 +1876,218 @@
         ul.appendChild(li);
       });
       sec.append(h2, ul);
-      decksBody.appendChild(sec);
+      content.appendChild(sec);
     });
+  }
+
+  /* ---------- Riepilogo: curva di mana, colori, media ---------- */
+  const PIP_COLORS = { W: '#efe6c4', U: '#4f9fdc', B: '#8a7ca8', R: '#e4644c', G: '#4caf74' };
+  const isLand = (c) => /\bLand\b/.test(frontType(c)) && !/\bCreature\b/.test(frontType(c));
+  const fullCost = (c) => c.mana_cost || (c.card_faces || []).map((f) => f.mana_cost || '').join('');
+  function deckStats(d) {
+    const curve = new Array(8).fill(0), pips = { W: 0, U: 0, B: 0, R: 0, G: 0 };
+    let lands = 0, spells = 0, mvSum = 0;
+    d.cards.forEach(({ qty, card }) => {
+      if (isLand(card)) { lands += qty; return; }
+      spells += qty;
+      const mv = Math.max(0, Math.floor(card.cmc || 0));
+      mvSum += mv * qty;
+      curve[Math.min(7, mv)] += qty;
+      (fullCost(card).match(/\{[^}]+\}/g) || []).forEach((sym) => {
+        'WUBRG'.split('').forEach((k) => { if (sym.includes(k)) pips[k] += qty; });
+      });
+    });
+    const box = document.createElement('div'); box.className = 'deck-stats';
+    const block = (cls, title) => {
+      const b = document.createElement('div'); b.className = 'st ' + cls;
+      const k = document.createElement('div'); k.className = 'st-k'; k.textContent = title;
+      b.appendChild(k); box.appendChild(b); return b;
+    };
+
+    const cb = block('st-curve', 'Curva di mana');
+    if (spells) {
+      const max = Math.max(...curve, 1);
+      const c = document.createElement('div'); c.className = 'curve';
+      curve.forEach((n, i) => {
+        const col = document.createElement('div'); col.className = 'col';
+        col.title = (i === 7 ? '7 o più' : 'Valore ' + i) + ': ' + n + (n === 1 ? ' carta' : ' carte');
+        const num = document.createElement('span'); num.className = 'n'; num.textContent = n ? String(n) : '';
+        const bar = document.createElement('div'); bar.className = 'bar' + (n ? '' : ' zero');
+        bar.style.height = Math.max(3, Math.round(58 * n / max)) + 'px';
+        const l = document.createElement('span'); l.className = 'l'; l.textContent = i === 7 ? '7+' : String(i);
+        col.append(num, bar, l); c.appendChild(col);
+      });
+      cb.appendChild(c);
+    } else { const p = document.createElement('div'); p.className = 'st-none'; p.textContent = 'Solo terre, per ora.'; cb.appendChild(p); }
+
+    const pb = block('st-colors', 'Simboli di colore');
+    const totPips = Object.values(pips).reduce((a, b) => a + b, 0);
+    if (totPips) {
+      const barEl = document.createElement('div'); barEl.className = 'pipbar';
+      const list = document.createElement('div'); list.className = 'pips';
+      'WUBRG'.split('').forEach((k) => {
+        if (!pips[k]) return;
+        const seg = document.createElement('span'); seg.style.width = (100 * pips[k] / totPips) + '%'; seg.style.background = PIP_COLORS[k];
+        barEl.appendChild(seg);
+        const it = document.createElement('span'); it.className = 'p';
+        it.title = Math.round(100 * pips[k] / totPips) + '%';
+        it.append(manaEl('{' + k + '}').firstChild || document.createTextNode(k), document.createTextNode(String(pips[k])));
+        list.appendChild(it);
+      });
+      pb.append(barEl, list);
+    } else { const p = document.createElement('div'); p.className = 'st-none'; p.textContent = 'Nessun simbolo colorato.'; pb.appendChild(p); }
+
+    const ab = block('st-avg', 'Valore medio');
+    const big = document.createElement('div'); big.className = 'st-big';
+    big.textContent = spells ? (mvSum / spells).toLocaleString('it-IT', { maximumFractionDigits: 2 }) : '—';
+    const sub = document.createElement('div'); sub.className = 'st-sub';
+    sub.textContent = (lands === 1 ? '1 terra' : lands + ' terre') + ' · ' + (spells === 1 ? '1 altra carta' : spells + ' altre carte');
+    ab.append(big, sub);
+    return box;
+  }
+
+  /* ---------- Importa una lista ---------- */
+  const importSheet = $('#importSheet'), importName = $('#importName'), importText = $('#importText');
+  const importHint = $('#importHint'), importGo = $('#importGo');
+  const IMPORT_HINT = importHint.textContent;
+  let importTarget = null, importNotice = null;
+
+  function openImport(deckId) {
+    const d = deckId ? deckById(deckId) : null;
+    importTarget = d ? d.id : null;
+    $('#importTitle').textContent = d ? 'Incolla carte in «' + d.name + '»' : 'Importa una lista';
+    importName.hidden = !!d;
+    importName.value = ''; importText.value = '';
+    importHint.textContent = IMPORT_HINT;
+    importGo.disabled = false;
+    importGo.textContent = d ? 'Aggiungi al mazzo' : 'Crea il mazzo';
+    importSheet.hidden = false;
+    setTimeout(() => (d ? importText : importName).focus(), 30);
+  }
+  function closeImport() {
+    if (importSheet.hidden) return;
+    if (importSheet.contains(document.activeElement)) document.activeElement.blur();
+    importSheet.hidden = true;
+  }
+
+  /* Righe come "4 Lightning Bolt", "4x Lightning Bolt", "1 Atraxa, Grand Unifier (ONE) 196 *F*".
+     Le righe dopo "Sideboard" o "Maybeboard" vengono saltate. */
+  function parseList(text) {
+    const out = new Map();
+    let skip = false;
+    text.split(/\r?\n/).forEach((raw) => {
+      let line = raw.replace(/\s+/g, ' ').trim();
+      if (!line || /^(\/\/|#)/.test(line)) return;
+      const head = line.replace(/:$/, '').toLowerCase();
+      if (/^(sideboard|maybeboard|considering|tokens?)\b/.test(head)) { skip = true; return; }
+      if (/^(deck|mazzo|main ?deck|mainboard|commander|companion|about)$/.test(head)) { skip = false; return; }
+      if (/^name /i.test(line)) return;
+      if (skip) return;
+      let qty = 1;
+      const m = /^(\d+)\s*x?\s+(.+)$/i.exec(line);
+      if (m) { qty = parseInt(m[1], 10); line = m[2]; }
+      line = line.replace(/\s+\*[A-Za-z]+\*$/, '').replace(/\s+#\S.*$/, '').trim();
+      let name = line, set = '', num = '';
+      let mm = /^(.*?)\s+\(([A-Za-z0-9]{2,6})\)\s+(\S+)$/.exec(line);
+      if (mm) { name = mm[1]; set = mm[2].toLowerCase(); num = mm[3]; }
+      else if ((mm = /^(.*?)\s+\(([A-Za-z0-9]{2,6})\)$/.exec(line))) { name = mm[1]; set = mm[2].toLowerCase(); }
+      name = name.replace(/\s*\/\s*/g, ' // ').replace(/(\s\/\/\s)+/g, ' // ').trim();
+      if (!name || qty < 1) return;
+      const key = [name.toLowerCase(), set, num].join('|');
+      const prev = out.get(key);
+      if (prev) prev.qty += qty; else out.set(key, { qty, name, set, num, line: raw.trim() });
+    });
+    return [...out.values()];
+  }
+
+  async function sfPost(path, body) {
+    const wait = Math.max(0, nextSlot - Date.now());
+    nextSlot = Date.now() + wait + 100;
+    if (wait) await new Promise((r) => setTimeout(r, wait));
+    const res = await fetch(API + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) { const e = new Error('HTTP ' + res.status); e.status = res.status; throw e; }
+    return res.json();
+  }
+  const normName = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9/ ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  function cardMatches(c, it) {
+    if (it.set && it.num) return c.set === it.set && String(c.collector_number).toLowerCase() === it.num.toLowerCase();
+    if (it.set && c.set !== it.set) return false;
+    const n = normName(it.name);
+    const names = [c.name].concat((c.card_faces || []).map((f) => f.name)).map(normName);
+    return names.includes(n) || normName(c.name).startsWith(n + ' //');
+  }
+  async function resolveList(items, progress) {
+    const found = [], missing = [];
+    for (let i = 0; i < items.length; i += 75) {
+      const chunk = items.slice(i, i + 75);
+      const ids = chunk.map((it) => (it.set && it.num ? { set: it.set, collector_number: it.num } : it.set ? { name: it.name, set: it.set } : { name: it.name }));
+      const data = await sfPost('/cards/collection', { identifiers: ids });
+      const cards = data.data || [];
+      chunk.forEach((it) => {
+        const c = cards.find((x) => cardMatches(x, it));
+        if (c) found.push({ qty: it.qty, card: c }); else missing.push(it);
+      });
+      progress(Math.min(items.length, i + 75));
+    }
+    /* Seconda possibilità per i nomi scritti in modo un po' diverso (al massimo 25 tentativi). */
+    const still = [];
+    for (const [k, it] of missing.entries()) {
+      if (k >= 25) { still.push(it); continue; }
+      try { found.push({ qty: it.qty, card: await sf('/cards/named?' + new URLSearchParams({ fuzzy: it.name })) }); }
+      catch (_) { still.push(it); }
+    }
+    return { found, missing: still };
+  }
+
+  async function runImport() {
+    const items = parseList(importText.value);
+    if (!items.length) { importHint.textContent = 'Non trovo righe valide: scrivi una carta per riga, per esempio "4 Lightning Bolt".'; importText.focus(); return; }
+    importGo.disabled = true;
+    importHint.textContent = 'Cerco ' + (items.length === 1 ? '1 carta' : items.length + ' carte') + ' su Scryfall…';
+    try {
+      const { found, missing } = await resolveList(items, (k) => { importHint.textContent = 'Cerco le carte… ' + k + ' di ' + items.length; });
+      if (!found.length) { importHint.textContent = 'Nessuna carta trovata. Controlla che i nomi siano scritti in inglese.'; importGo.disabled = false; return; }
+      let d = importTarget ? deckById(importTarget) : null;
+      if (!d) d = createDeck(importName.value.trim() || 'Mazzo importato');
+      let added = 0;
+      found.forEach(({ qty, card }) => {
+        const e = d.cards.find((x) => x.card.id === card.id);
+        if (e) e.qty = Math.min(99, e.qty + qty); else d.cards.push({ qty: Math.min(99, qty), card: snapshot(card) });
+        added += qty;
+      });
+      d.updated = Date.now();
+      saveDecks(); updateAddBadge();
+      importNotice = missing.length ? { deck: d.id, names: missing.map((m) => m.line) } : null;
+      closeImport();
+      openDecks(d.id);
+      msg((added === 1 ? 'Importata 1 carta' : 'Importate ' + added + ' carte') + (missing.length ? ' · ' + (missing.length === 1 ? '1 riga non trovata' : missing.length + ' righe non trovate') : '') + '.');
+    } catch (e) {
+      importHint.textContent = 'Errore di rete: controlla la connessione e riprova.';
+      importGo.disabled = false;
+    }
+  }
+  importGo.addEventListener('click', runImport);
+  importText.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runImport(); } });
+  $('#importClose').addEventListener('click', closeImport);
+  importSheet.addEventListener('click', (e) => { if (e.target === importSheet) closeImport(); });
+
+  function noticeEl(d) {
+    const box = document.createElement('div'); box.className = 'deck-notice';
+    const txt = document.createElement('div');
+    const b = document.createElement('b');
+    b.textContent = importNotice.names.length === 1 ? '1 riga non trovata' : importNotice.names.length + ' righe non trovate';
+    const sp = document.createElement('span');
+    const shown = importNotice.names.slice(0, 12);
+    sp.textContent = shown.join(' · ') + (importNotice.names.length > shown.length ? ' · e altre ' + (importNotice.names.length - shown.length) : '');
+    txt.append(b, sp);
+    const x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.setAttribute('aria-label', 'Chiudi avviso');
+    x.addEventListener('click', () => { importNotice = null; renderDeck(d); });
+    box.append(txt, x);
+    return box;
   }
 
   /* Elenco o visuale: la scelta resta salvata. */
@@ -1656,7 +2116,7 @@
     return seg;
   }
 
-  function renderDeckVisual(d) {
+  function renderDeckVisual(d, content) {
     const order = [];
     const gridEl = document.createElement('div'); gridEl.className = 'vgrid';
     grouped(d).forEach((g) => {
@@ -1685,7 +2145,7 @@
       col.append(h2, stack);
       gridEl.appendChild(col);
     });
-    decksBody.appendChild(gridEl);
+    content.appendChild(gridEl);
   }
 
   function startRename(d, h) {
@@ -1715,13 +2175,53 @@
     catch (_) { prompt('Copia la lista del mazzo:', text); }
   }
 
-  /* Apre una carta del mazzo nella vista grande; ← → scorrono le carte del mazzo. */
+  /* Apre una carta del mazzo nella vista grande; ← → scorrono le carte del mazzo.
+     deckSlots ricorda, per ogni posizione, quale stampa c'è nel mazzo: se scegli un'altra
+     versione dalla colonna delle varianti, compare il pulsante per sostituirla. */
   function openFromDeck(d, cards, i) {
     list = cards.slice(); index = i; listToken = -1;
+    deckSlots = cards.map((c) => c.id);
     returnTo = { deck: d.id };
     closeDecks(true);
     show(list[i], i);
   }
+
+  function deckSlot() {
+    if (!deckSlots || !returnTo || !returnTo.deck) return null;
+    const d = deckById(returnTo.deck);
+    const id = deckSlots[index];
+    const entry = d && d.cards.find((e) => e.card.id === id);
+    return entry ? { d, entry } : null;
+  }
+  const useInDeckBtn = $('#useInDeck');
+  function syncUseInDeck() {
+    const slot = deckSlot();
+    const show_ = !!(slot && current && current.id !== slot.entry.card.id);
+    useInDeckBtn.hidden = !show_;
+    if (show_) useInDeckBtn.querySelector('span').textContent = 'Usa questa versione in «' + slot.d.name + '»';
+  }
+  function useInDeck() {
+    const slot = deckSlot();
+    if (!slot || !current) return;
+    const { d, entry } = slot;
+    const oldId = entry.card.id;
+    const other = d.cards.find((e) => e !== entry && e.card.id === current.id);
+    if (other) {
+      /* Questa stampa era già nel mazzo: uniamo le copie in un'unica riga. */
+      other.qty = Math.min(99, other.qty + entry.qty);
+      d.cards.splice(d.cards.indexOf(entry), 1);
+    } else {
+      entry.card = snapshot(current);
+    }
+    d.updated = Date.now();
+    saveDecks();
+    deckSlots = deckSlots.map((id) => (id === oldId ? current.id : id));
+    updateAddBadge();
+    syncUseInDeck();
+    if (varState) renderVariants(varState.vs, varState.f, new Set(varState.vs.map((v) => faceArtist(v, varState.f)).filter(Boolean)).size);
+    msg('Versione aggiornata nel mazzo «' + d.name + '».');
+  }
+  useInDeckBtn.addEventListener('click', useInDeck);
 
   function canGoBack() { return !!(returnTo && returnTo.deck && deckById(returnTo.deck)) || results.length > 0; }
   function goBack() {
