@@ -813,7 +813,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '14';
+  const VERSION = '15';
   const API = 'https://api.scryfall.com';
   const $ = (s) => document.querySelector(s);
   const wrap = $('#wrap'), btn = $('#cardBtn'), img = $('#card');
@@ -1109,8 +1109,33 @@
       if (my !== searchToken) return;
       results = data.data || [];
       renderGrid(results);
-      hintEl.textContent = data.total_cards > results.length ? `Prime ${results.length} carte su ${data.total_cards}. Restringi la ricerca per vederne altre.` : (data.total_cards === 1 ? '1 carta' : `${data.total_cards} carte`);
+      const total = data.total_cards || results.length;
+      /* Scryfall restituisce 175 carte per pagina: scarichiamo le pagine successive
+         (come per i set), fino a un tetto per non bloccare il telefono su ricerche enormi. */
+      const MAX_RESULTS = 1750;
+      const label = (more) => more
+        ? (results.length >= MAX_RESULTS
+            ? `Prime ${results.length} carte su ${total}. Restringi la ricerca per vederne altre.`
+            : `${results.length} di ${total} carte…`)
+        : (total === 1 ? '1 carta' : `${total} carte`);
+      let next = data.has_more && data.next_page ? data.next_page : '';
+      hintEl.textContent = label(!!next);
       if (openFirst && results.length) pick(0);
+      try {
+        while (next && results.length < MAX_RESULTS) {
+          const page = await sf(next);
+          if (my !== searchToken) return;
+          const items = page.data || [];
+          const from = results.length;
+          results.push(...items);
+          if (listToken === my) list.push(...items);
+          renderGrid(results, from);
+          next = page.has_more && page.next_page ? page.next_page : '';
+          hintEl.textContent = label(!!next);
+        }
+      } catch (e) {
+        if (my === searchToken) hintEl.textContent = `${results.length} carte su ${total} (errore di rete, lista incompleta)`;
+      }
     } catch (e) {
       if (my !== searchToken) return;
       grid.textContent = '';
